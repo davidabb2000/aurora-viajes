@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@import "@fontsource/fraunces/600.css";
+@import "@fontsource/fraunces/700.css";
+@import "@fontsource/fraunces/600-italic.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+
+@theme {
+  /* Paleta — Aurora Viajes */
+  --color-primario: #0f3d3e;
+  --color-primario-oscuro: #0b2c2d;
+  --color-primario-suave: #4c7c7a;
+  --color-acento: #c9a227;
+  --color-acento-suave: #e8c468;
+  --color-fondo: #f7f4ee;
+  --color-superficie: #ffffff;
+  --color-texto: #21201c;
+  --color-texto-suave: #55534a;
+  --color-borde: #e4ddcb;
+
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-cuerpo: "Inter", "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--color-fondo);
+  color: var(--color-texto);
+  font-family: var(--font-cuerpo);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
