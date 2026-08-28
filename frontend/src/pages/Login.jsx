@@ -19,6 +19,7 @@ function Login() {
   const [sesionIniciada, setSesionIniciada] = useState(false);
   const [mensajeError, setMensajeError] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [mostrarContrasena, setMostrarContrasena] = useState(false);
 
   const manejarCambio = (evento) => {
     const { name, value } = evento.target;
@@ -113,7 +114,7 @@ function Login() {
             <Input
               label="Contraseña"
               name="contrasena"
-              type="password"
+              type={mostrarContrasena ? "text" : "password"}
               value={valores.contrasena}
               onChange={manejarCambio}
               onBlur={manejarBlur}
@@ -121,6 +122,9 @@ function Login() {
               required
               placeholder="Tu contraseña"
               autoComplete="current-password"
+              botonContrasena
+              mostrarContrasena={mostrarContrasena}
+              cambiarVisibilidad={() => setMostrarContrasena((visible) => !visible)}
             />
 
             <div className="flex items-center justify-between text-sm">

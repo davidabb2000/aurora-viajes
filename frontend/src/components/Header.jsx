@@ -45,7 +45,7 @@ function Header() {
             <div className="flex items-center gap-3 text-sm">
               <span className="font-medium text-primario">Bienvenido, {sesion.usuario.nombre}</span>
               <NavLink to="/panel" className="font-semibold text-primario-suave hover:text-primario">Mi panel</NavLink>
-              <button type="button" onClick={cerrarSesion} className="font-semibold text-primario-suave hover:text-primario ml-2">
+              <button type="button" onClick={cerrarSesion} className="ml-2 font-semibold text-primario-suave hover:text-primario">
                 Cerrar sesión
               </button>
             </div>
