@@ -2,19 +2,22 @@ import { useState } from "react";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import { validarRequerido, validarCorreo } from "../utils/validaciones";
+import { solicitar } from "../utils/api";
 
 function Contacto() {
   const [formulario, setFormulario] = useState({ nombre: "", correo: "", mensaje: "" });
   const [errores, setErrores] = useState({});
   const [enviado, setEnviado] = useState(false);
+  const [errorEnvio, setErrorEnvio] = useState("");
 
   const manejarCambio = (evento) => {
     const { name, value } = evento.target;
     setFormulario((prev) => ({ ...prev, [name]: value }));
   };
 
-  const manejarEnvio = (evento) => {
+  const manejarEnvio = async (evento) => {
     evento.preventDefault();
+    setErrorEnvio("");
     const nuevosErrores = {
       nombre: validarRequerido(formulario.nombre),
       correo: validarCorreo(formulario.correo),
@@ -23,7 +26,13 @@ function Contacto() {
     setErrores(nuevosErrores);
 
     const hayErrores = Object.values(nuevosErrores).some(Boolean);
-    if (!hayErrores) setEnviado(true);
+    if (hayErrores) return;
+    try {
+      await solicitar("/contacto", { method: "POST", body: JSON.stringify(formulario) });
+      setEnviado(true);
+    } catch (error) {
+      setErrorEnvio(error.message);
+    }
   };
 
   return (
@@ -92,6 +101,7 @@ function Contacto() {
               ¡Gracias, {formulario.nombre || "viajero"}! Recibimos tu mensaje.
             </p>
           )}
+          {errorEnvio && <p role="alert" className="text-sm font-medium text-red-600">{errorEnvio}</p>}
         </form>
       </div>
     </div>

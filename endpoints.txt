@@ -1,0 +1,8 @@
+POST   /api/auth/login
+POST   /api/auth/registro
+GET    /api/reservas
+POST   /api/reservas
+PUT    /api/reservas/:id
+DELETE /api/reservas/:id
+POST   /api/contacto
+GET    /api/contacto

@@ -158,7 +158,7 @@ function RegisterModal({ abierto, alCerrar }) {
               error={tocados.nombre ? errores.nombre : ""}
               required
               maxLength={40}
-              placeholder="Ana"
+              placeholder="Ana (máx. 40 caracteres)"
             />
             <Input
               label="Apellido"
@@ -169,7 +169,7 @@ function RegisterModal({ abierto, alCerrar }) {
               error={tocados.apellido ? errores.apellido : ""}
               required
               maxLength={40}
-              placeholder="Gómez"
+              placeholder="Gómez (máx. 40 caracteres)"
             />
           </div>
 
@@ -193,7 +193,7 @@ function RegisterModal({ abierto, alCerrar }) {
               error={tocados.numeroDocumento ? errores.numeroDocumento : ""}
               required
               maxLength={12}
-              placeholder="1000000000"
+              placeholder="1000000000 (máx. 12 dígitos)"
             />
           </div>
 
@@ -206,7 +206,7 @@ function RegisterModal({ abierto, alCerrar }) {
             error={tocados.direccion ? errores.direccion : ""}
             required
             maxLength={80}
-            placeholder="Calle 10 # 20-30"
+            placeholder="Calle 10 # 20-30 (máx. 80 caracteres)"
           />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -219,7 +219,7 @@ function RegisterModal({ abierto, alCerrar }) {
               error={tocados.telefono ? errores.telefono : ""}
               required
               maxLength={10}
-              placeholder="3000000000"
+              placeholder="3000000000 (máx. 10 dígitos)"
             />
             <Input
               label="Correo electrónico"
@@ -231,7 +231,7 @@ function RegisterModal({ abierto, alCerrar }) {
               error={tocados.correo ? errores.correo : ""}
               required
               maxLength={60}
-              placeholder="tucorreo@ejemplo.com"
+              placeholder="tucorreo@ejemplo.com (máx. 60 caracteres)"
             />
           </div>
 
@@ -246,7 +246,7 @@ function RegisterModal({ abierto, alCerrar }) {
               error={tocados.contrasena ? errores.contrasena : ""}
               required
               maxLength={20}
-              placeholder="Mín. 8 caracteres"
+              placeholder="Mín. 8, máx. 20 caracteres"
             />
             <Input
               label="Confirmar contraseña"
@@ -258,7 +258,7 @@ function RegisterModal({ abierto, alCerrar }) {
               error={tocados.confirmarContrasena ? errores.confirmarContrasena : ""}
               required
               maxLength={20}
-              placeholder="Repite la contraseña"
+              placeholder="Repite la contraseña (máx. 20 caracteres)"
             />
           </div>
 

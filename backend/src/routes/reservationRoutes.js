@@ -39,11 +39,24 @@ router.get("/mias", autenticar, async (req, res) => {
 router.get("/", autenticar, exigirRoles("administrador", "empleado"), async (_req, res) => {
   const [reservas] = await pool.execute(
     `SELECT r.id, r.destino, r.fecha_salida AS fechaSalida, r.fecha_regreso AS fechaRegreso,
-      r.pasajeros, r.telefono_contacto AS telefonoContacto, r.estado,
+      r.pasajeros, r.telefono_contacto AS telefonoContacto, r.notas, r.estado,
       CONCAT(u.nombre, ' ', u.apellido) AS cliente
      FROM reservas r JOIN usuarios u ON u.id = r.usuario_id ORDER BY r.creado_en DESC`
   );
   res.json(reservas);
+});
+
+router.put("/:id", autenticar, exigirRoles("administrador", "empleado"), async (req, res) => {
+  const datos = datosReserva(req.body);
+  if (!datos) return res.status(400).json({ mensaje: "Revisa destino, fechas, pasajeros y teléfono de contacto." });
+  const [resultado] = await pool.execute(
+    `UPDATE reservas
+     SET destino = ?, fecha_salida = ?, fecha_regreso = ?, pasajeros = ?, telefono_contacto = ?, notas = ?
+     WHERE id = ?`,
+    [...datos, req.params.id]
+  );
+  if (!resultado.affectedRows) return res.status(404).json({ mensaje: "Reserva no encontrada." });
+  res.json({ mensaje: "Solicitud actualizada correctamente." });
 });
 
 router.patch("/:id/estado", autenticar, exigirRoles("administrador", "empleado"), async (req, res) => {

@@ -5,6 +5,7 @@ const userRoutes = require("./routes/userRoutes");
 const catalogRoutes = require("./routes/catalogRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const reservationRoutes = require("./routes/reservationRoutes");
+const contactRoutes = require("./routes/contactRoutes");
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
@@ -16,6 +17,7 @@ app.use("/api/usuarios", userRoutes);
 app.use("/api/catalogo", catalogRoutes);
 app.use("/api/perfil", profileRoutes);
 app.use("/api/reservas", reservationRoutes);
+app.use("/api/contacto", contactRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
