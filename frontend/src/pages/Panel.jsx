@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { obtenerSesion, solicitar } from "../utils/api";
+import { solicitar } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
 
 function Panel() {
-  const sesion = obtenerSesion();
+  const { sesion } = useAuth();
   const [reservas, setReservas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [mensajesContacto, setMensajesContacto] = useState([]);
