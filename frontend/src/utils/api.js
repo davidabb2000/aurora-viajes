@@ -1,13 +1,24 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 export async function solicitar(ruta, opciones = {}) {
   const { headers: headersOpcionales = {}, ...opcionesFetch } = opciones;
-  const respuesta = await fetch(`${API_URL}${ruta}`, {
-    ...opcionesFetch,
-    headers: { "Content-Type": "application/json", ...headersOpcionales },
-  });
+  let respuesta;
+  try {
+    respuesta = await fetch(`${API_URL}${ruta}`, {
+      ...opcionesFetch,
+      headers: { "Content-Type": "application/json", ...headersOpcionales },
+    });
+  } catch {
+    throw new Error("No se pudo conectar con el backend. Verifica que FastAPI esté ejecutándose.");
+  }
   const datos = await respuesta.json().catch(() => ({}));
-  if (!respuesta.ok) throw new Error(datos.mensaje || "Ocurrió un error en la solicitud.");
+  const mensaje =
+    datos.mensaje ||
+    datos.detail ||
+    (Array.isArray(datos?.detail)
+      ? datos.detail.map((item) => item.msg || item.message || String(item)).join(" ")
+      : "");
+  if (!respuesta.ok) throw new Error(mensaje || "Ocurrió un error en la solicitud.");
   return datos;
 }
 

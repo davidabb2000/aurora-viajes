@@ -4,11 +4,13 @@ import Button from "../components/Button";
 import RecoverPassword from "../components/RecoverPassword";
 import RegisterModal from "../components/RegisterModal";
 import { validarCorreo, validarRequerido } from "../utils/validaciones";
-import { guardarSesion, solicitar } from "../utils/api";
+import { solicitar } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
 
 const VALORES_INICIALES = { correo: "", contrasena: "" };
 
 function Login() {
+  const { iniciarSesion } = useAuth();
   const [vista, setVista] = useState("login"); // "login" | "recuperar"
   const [registroAbierto, setRegistroAbierto] = useState(false);
 
@@ -57,7 +59,7 @@ function Login() {
         method: "POST",
         body: JSON.stringify(valores),
       });
-      guardarSesion(datos, recordarme);
+      iniciarSesion(datos, recordarme);
       setSesionIniciada(true);
     } catch (error) {
       setMensajeError(error.message);

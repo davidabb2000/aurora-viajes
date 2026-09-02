@@ -123,7 +123,7 @@ function RegisterModal({ abierto, alCerrar }) {
     setMensajeError("");
     setCargando(true);
     try {
-      await solicitar("/auth/registro", {
+      await solicitar("/usuarios/registro", {
         method: "POST",
         body: JSON.stringify(valores),
       });

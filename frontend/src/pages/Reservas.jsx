@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import destinos from "../data/destinos";
-import { obtenerSesion, solicitar } from "../utils/api";
+import { solicitar } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
 
 function Reservas() {
-    const sesion = obtenerSesion();
+    const { sesion } = useAuth();
     const location = useLocation();
     const [formulario, setFormulario] = useState({ destino: destinos[0].titulo, fechaSalida: "", fechaRegreso: "", pasajeros: 1, telefonoContacto: "", notas: "" });
     const [mensaje, setMensaje] = useState("");

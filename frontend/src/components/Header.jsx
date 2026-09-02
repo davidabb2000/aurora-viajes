@@ -1,15 +1,8 @@
-import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { cerrarSesion, obtenerSesion } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
 
 function Header() {
-  const [sesion, setSesion] = useState(obtenerSesion);
-
-  useEffect(() => {
-    const actualizar = () => setSesion(obtenerSesion());
-    window.addEventListener("aurora-sesion", actualizar);
-    return () => window.removeEventListener("aurora-sesion", actualizar);
-  }, []);
+  const { sesion, cerrarSesion } = useAuth();
 
   const enlaceClase = ({ isActive }) =>
     `border-b-2 pb-1 text-sm font-medium transition-colors ${

@@ -11,6 +11,14 @@ CREATE TABLE IF NOT EXISTS permisos (
   nombre VARCHAR(80) NOT NULL UNIQUE
 );
 
+CREATE TABLE IF NOT EXISTS rol_permisos (
+  rol_id INT UNSIGNED NOT NULL,
+  permiso_id INT UNSIGNED NOT NULL,
+  PRIMARY KEY (rol_id, permiso_id),
+  CONSTRAINT fk_rolpermiso_rol FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE CASCADE,
+  CONSTRAINT fk_rolpermiso_permiso FOREIGN KEY (permiso_id) REFERENCES permisos(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS usuarios (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(40) NOT NULL,
@@ -74,3 +82,14 @@ ALTER TABLE reservas ADD COLUMN IF NOT EXISTS notas VARCHAR(300) AFTER telefono_
 ALTER TABLE reservas ADD COLUMN IF NOT EXISTS actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER creado_en;
 
 INSERT IGNORE INTO roles (nombre) VALUES ('administrador'), ('empleado'), ('cliente');
+
+INSERT IGNORE INTO permisos (nombre) VALUES
+  ('usuarios:gestionar'), ('productos:gestionar'), ('servicios:gestionar'),
+  ('reservas:gestionar'), ('reservas:crear'), ('mensajes:leer');
+
+INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
+SELECT r.id, p.id FROM roles r JOIN permisos p ON (
+  (r.nombre = 'administrador' AND p.nombre IN ('usuarios:gestionar','productos:gestionar','servicios:gestionar','reservas:gestionar','mensajes:leer')) OR
+  (r.nombre = 'empleado' AND p.nombre IN ('reservas:gestionar')) OR
+  (r.nombre = 'cliente' AND p.nombre IN ('reservas:crear'))
+);
