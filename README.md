@@ -1,77 +1,70 @@
-# Aurora Viajes — Proyecto React + Vite
+# Aurora Viajes
 
-Ficha 3406211 · Ambiente 702 · Competencia React
-Instructor: Jhan Hader Muñoz
+Proyecto full stack con **React + Vite** en `frontend/` y **FastAPI** en `backend/`.
 
-## Avances incluidos
+## Backend
 
-### Primer avance
-- Proyecto React + Vite.
-- Enrutamiento con React Router DOM (Inicio, ¿Quiénes Somos?, Contacto).
-- Carrusel de 10 destinos (imagen, título, descripción).
-- Componentes `Header`, `Footer`, `Carousel`.
+El backend usa MySQL/XAMPP con base `aurora_viajes`, con un esquema normalizado y el contrato que espera el frontend.
 
-### Segundo avance
-- **Tailwind CSS** integrado mediante `@tailwindcss/vite`, con una paleta y
-  tipografías propias definidas como tokens en `src/index.css` (`@theme`).
-- Todos los componentes y páginas migrados a clases de Tailwind, responsivos.
-- **Módulo de inicio de sesión** (`/login`): correo, contraseña, "Recordarme",
-  enlace "¿Olvidaste tu contraseña?" y enlace "Crear una cuenta".
-- **`RecoverPassword`**: componente independiente y reutilizable, con
-  validación de correo y opción de regresar al login.
-- **`RegisterModal`**: formulario de registro completo (nombre, apellido,
-  tipo y número de documento, dirección, teléfono, correo, contraseña y
-  confirmación), mostrado dentro de un Modal reutilizable, con cierre sin
-  completar el registro.
-- **Validaciones en tiempo real** (`src/utils/validaciones.js`): campos
-  obligatorios, longitud mínima/máxima, RegEx, formato de correo, número de
-  documento, teléfono, reglas de contraseña y coincidencia de confirmación.
-- Componentes base reutilizables: `Input`, `Select`, `Button`, `Modal`.
-- Uso de Hooks: `useState` para formularios y vistas, `useEffect` en `Modal`
-  (bloqueo de scroll y cierre con Escape) y en `Carousel` (auto-reproducción).
+Los precios de reserva se calculan por destino, pasajeros y duración del viaje.
 
-## Estructura del proyecto
-```
-src/
-├─ assets/images/       # 10 imágenes SVG del carrusel
-├─ components/
-│  ├─ Header.jsx / Footer.jsx / Carousel.jsx
-│  ├─ Input.jsx / Select.jsx / Button.jsx / Modal.jsx
-│  ├─ RecoverPassword.jsx
-│  └─ RegisterModal.jsx
-├─ pages/
-│  ├─ Index.jsx / QuienesSomos.jsx / Contacto.jsx
-│  └─ Login.jsx
-├─ data/destinos.js      # Los 10 destinos del carrusel
-├─ utils/validaciones.js # Validadores reutilizables (RegEx incluidas)
-├─ App.jsx                # Enrutamiento (incluye /login)
-├─ main.jsx                # Punto de entrada (BrowserRouter)
-└─ index.css                # Import de Tailwind + tokens de diseño (@theme)
+### Tablas principales
+
+- usuarios
+- roles
+- permisos
+- rol_permisos
+- tipos_documento
+- paises
+- destinos
+- estados_reserva
+- estados_pago
+- metodos_pago
+- productos
+- servicios
+- reservas
+- mensajes_contacto
+
+### Arranque
+
+```powershell
+cd backend
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-## Cómo ejecutarlo
-```bash
+Si vas a recrear la base desde cero, importa antes `backend\sql\schema.sql` en phpMyAdmin.
+
+### Frontend
+
+```powershell
+cd frontend
 npm install
 npm run dev
 ```
-Abre la URL que muestra la terminal (por defecto `http://localhost:5173`).
-La ruta `/login` contiene el inicio de sesión, la recuperación de contraseña
-y el botón que abre el modal de registro.
 
-Para producción:
-```bash
-npm run build
-npm run preview
-```
+## Integración
 
-### Tercer avance
-- Integración con Node.js, Express, MySQL, bcrypt y JWT.
-- Registro, login y recuperación conectados al backend.
-- Reservas persistentes con destino, fechas, pasajeros, contacto, notas y estados.
-- Paneles diferenciados para clientes, empleados y administradores.
-- CRUD administrativo de usuarios y cambio de estado.
+El frontend llama a la API mediante `frontend/src/utils/api.js` y Vite redirige `/api` a `http://127.0.0.1:8001`.
 
-## Notas
-- Las 10 imágenes del carrusel son ilustraciones SVG generadas para el
-  ejercicio; reemplázalas en `src/assets/images` y actualiza las rutas en
-  `src/data/destinos.js` si quieres usar fotografías reales.
+## Contrato principal
+
+- `POST /api/auth/login`
+- `POST /api/usuarios/registro`
+- `GET /api/productos`
+- `GET /api/servicios`
+- `GET /api/catalogos/destinos`
+- `POST /api/reservas`
+- `GET /api/reservas/mias`
+- `GET /api/reservas/{id}`
+- `PUT /api/reservas/{id}`
+- `POST /api/reservas/{id}/pago/checkout`
+- `POST /api/reservas/{id}/pago/confirmar`
+- `POST /api/contacto`
+
+## Observación
+
+El frontend sigue enviando el destino como texto; el backend lo guarda así para mantener compatibilidad con lo que ya existe en la interfaz y en el panel.

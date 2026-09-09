@@ -20,6 +20,7 @@ function Footer() {
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-acento">Navegación</p>
           <nav className="flex flex-col items-start gap-2 text-sm text-[#cfc9b8]" aria-label="Navegación del pie de página">
             <Link to="/" className="transition hover:translate-x-1 hover:text-white">Inicio</Link>
+            <Link to="/recomendaciones" className="transition hover:translate-x-1 hover:text-white">Recomendaciones</Link>
             <Link to="/quienes-somos" className="transition hover:translate-x-1 hover:text-white">Quiénes somos</Link>
             <Link to="/reservas" className="transition hover:translate-x-1 hover:text-white">Reservas</Link>
             <Link to="/contacto" className="transition hover:translate-x-1 hover:text-white">Contacto</Link>
