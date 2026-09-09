@@ -18,6 +18,15 @@ export async function solicitar(ruta, opciones = {}) {
     (Array.isArray(datos?.detail)
       ? datos.detail.map((item) => item.msg || item.message || String(item)).join(" ")
       : "");
+  const tokenInvalido =
+    respuesta.status === 401 &&
+    /token.*(inv[aá]lid|expir)|token.*(no es v[aá]lido|inv[aá]lido)/i.test(mensaje);
+  if (tokenInvalido) {
+    cerrarSesion();
+    if (window.location.pathname !== "/login") {
+      window.location.assign("/login");
+    }
+  }
   if (!respuesta.ok) throw new Error(mensaje || "Ocurrió un error en la solicitud.");
   return datos;
 }
