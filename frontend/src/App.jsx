@@ -6,7 +6,9 @@ import QuienesSomos from "./pages/QuienesSomos";
 import Contacto from "./pages/Contacto";
 import Login from "./pages/Login";
 import Panel from "./pages/Panel";
+import PagoReserva from "./pages/PagoReserva";
 import Reservas from "./pages/Reservas";
+import PagoExitoso from "./pages/PagoExitoso";
 import WhatsAppButton from "./components/WhatsAppButton";
 
 function App() {
@@ -19,6 +21,8 @@ function App() {
         <Route path="/contacto" element={<Contacto />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reservas" element={<Reservas />} />
+        <Route path="/reservas/pago/:id" element={<PagoReserva />} />
+        <Route path="/reservas/pago-exitoso" element={<PagoExitoso />} />
         <Route path="/panel" element={<Panel />} />
       </Routes>
       <Footer />

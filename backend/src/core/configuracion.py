@@ -2,11 +2,14 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Configuracion(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+    # Apuntamos correctamente al .env dentro de src/
+    model_config = SettingsConfigDict(env_file='src/.env', env_file_encoding='utf-8', extra='ignore')
+    
     nombre_app: str
     entorno: str = 'desarrollo'
     depuracion: bool = True
     origenes_permitidos: list[str]
+    
     motor_bd: str
     mysql_host: str
     mysql_port: int
@@ -16,9 +19,11 @@ class Configuracion(BaseSettings):
     mysql_charset: str
     mysql_driver: str
     url_base_datos: str = ''
+    
     secret_key: str
     algoritmo_jwt: str
     minutos_expiracion_token: int
+    
     proveedor_ia_api_key: str | None = None
     proveedor_ia_url: str
     proveedor_ia_modelo: str

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import destinos from "../data/destinos";
 import { solicitar } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 function Reservas() {
     const { sesion } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
     const [formulario, setFormulario] = useState({ destino: destinos[0].titulo, fechaSalida: "", fechaRegreso: "", pasajeros: 1, telefonoContacto: "", notas: "" });
     const [mensaje, setMensaje] = useState("");
     const [error, setError] = useState("");
@@ -22,9 +23,10 @@ function Reservas() {
         if (new Date(formulario.fechaRegreso) < new Date(formulario.fechaSalida)) return setError("La fecha de regreso debe ser posterior a la fecha de salida.");
         setCargando(true);
         try {
-            await solicitar("/reservas", { method: "POST", headers: { Authorization: `Bearer ${sesion.token}` }, body: JSON.stringify({ ...formulario, pasajeros: Number(formulario.pasajeros) }) });
-            setMensaje("Tu solicitud fue registrada. Puedes consultar el estado en Mi panel.");
+            const reserva = await solicitar("/reservas", { method: "POST", headers: { Authorization: `Bearer ${sesion.token}` }, body: JSON.stringify({ ...formulario, pasajeros: Number(formulario.pasajeros) }) });
+            setMensaje("Tu solicitud fue registrada. Ahora completa el pago para confirmar la reserva.");
             setFormulario({ ...formulario, fechaSalida: "", fechaRegreso: "", notas: "" });
+            navigate(`/reservas/pago/${reserva.id}`);
         } catch (requestError) { setError(requestError.message); } finally { setCargando(false); }
     };
 
@@ -38,7 +40,7 @@ function Reservas() {
                 <label className="text-sm font-semibold text-texto">Pasajeros<select name="pasajeros" value={formulario.pasajeros} onChange={cambiar} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-3 font-normal outline-none focus:border-primario">{Array.from({ length: 9 }, (_, indice) => <option key={indice + 1} value={indice + 1}>{indice + 1}</option>)}</select></label>
                 <label className="text-sm font-semibold text-texto">Teléfono de contacto<input required pattern="[0-9]{7,10}" maxLength={10} name="telefonoContacto" value={formulario.telefonoContacto} onChange={cambiar} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-3 font-normal outline-none focus:border-primario" placeholder="3000000000" /></label>
                 <label className="text-sm font-semibold text-texto sm:col-span-2">Notas para el equipo<textarea maxLength={300} name="notas" value={formulario.notas} onChange={cambiar} rows="3" className="mt-2 w-full resize-y rounded-md border border-borde bg-fondo px-3 py-3 font-normal outline-none focus:border-primario" placeholder="Cuéntanos alguna preferencia (opcional)" /></label>
-            </div><button type="submit" disabled={cargando} className="mt-6 w-full rounded-md bg-primario px-5 py-3 font-semibold text-white transition hover:bg-primario-oscuro disabled:opacity-60">{cargando ? "Enviando solicitud..." : "Solicitar reserva"}</button>{mensaje && <p className="mt-4 text-sm font-medium text-primario">{mensaje}</p>}{error && <p className="mt-4 text-sm font-medium text-red-700">{error}</p>}</form>
+            </div><button type="submit" disabled={cargando} className="mt-6 w-full rounded-md bg-primario px-5 py-3 font-semibold text-white transition hover:bg-primario-oscuro disabled:opacity-60">{cargando ? "Enviando solicitud..." : "Solicitar y continuar al pago"}</button>{mensaje && <p className="mt-4 text-sm font-medium text-primario">{mensaje}</p>}{error && <p className="mt-4 text-sm font-medium text-red-700">{error}</p>}</form>
             <aside className="rounded-lg bg-primario p-7 text-white sm:p-8"><span className="text-xs font-semibold uppercase tracking-widest text-acento-suave">Tu experiencia empieza aquí</span><h2 className="mt-4 font-display text-3xl font-bold">Viajar se siente distinto cuando todo está pensado para ti.</h2><p className="mt-5 leading-relaxed text-white/75">Recibiremos tu solicitud, verificaremos disponibilidad y actualizaremos el estado de tu reserva desde tu panel personal.</p><div className="mt-8 border-t border-white/20 pt-5 text-sm text-white/75">Sesión activa como <strong className="text-white">{sesion.usuario.nombre}</strong></div></aside>
         </div>
     </main>;

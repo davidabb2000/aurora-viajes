@@ -302,6 +302,22 @@ function Panel() {
                       </div>
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
+                          Pago
+                        </p>
+                        <p className="mt-1 text-texto">
+                          {reserva.estadoPago || "pendiente"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
+                          Total
+                        </p>
+                        <p className="mt-1 text-texto">
+                          ${Number(reserva.montoTotal || 0).toLocaleString("es-CO")}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">
                           Teléfono de contacto
                         </p>
                         <p className="mt-1 text-texto">
@@ -339,6 +355,15 @@ function Panel() {
                           className="cursor-pointer rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"
                         >
                           Eliminar solicitud
+                        </button>
+                      )}
+                      {rol === "cliente" && reserva.estadoPago !== "pagado" && (
+                        <button
+                          type="button"
+                          onClick={() => window.location.assign(`/reservas/pago/${reserva.id}`)}
+                          className="cursor-pointer rounded-md bg-primario px-3 py-2 text-sm font-semibold text-white"
+                        >
+                          Ir al pago
                         </button>
                       )}
                       {esPersonal && (
@@ -430,7 +455,7 @@ function Panel() {
           <h2 className="font-display text-2xl font-bold text-primario">
             Usuarios registrados
           </h2>
-          <table className="mt-5 w-full min-w-[700px] text-left text-sm">
+          <table className="mt-5 w-full min-w-175 text-left text-sm">
             <thead>
               <tr className="border-b border-borde text-texto-suave">
                 <th className="pb-3">Nombre</th>
@@ -543,7 +568,7 @@ function Panel() {
             </p>
           ) : (
             <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-[700px] text-left text-sm">
+              <table className="w-full min-w-175 text-left text-sm">
                 <thead>
                   <tr className="border-b border-borde text-texto-suave">
                     <th className="pb-3">
@@ -553,6 +578,9 @@ function Panel() {
                     <th className="pb-3">Regreso</th>
                     <th className="pb-3">Pasajeros</th>
                     <th className="pb-3">Estado</th>
+                    <th className="pb-3">Pago</th>
+                    <th className="pb-3">Total</th>
+                    <th className="pb-3" />
                     {esPersonal && <th />}
                   </tr>
                 </thead>
@@ -566,6 +594,19 @@ function Panel() {
                       <td>{reserva.fechaRegreso}</td>
                       <td>{reserva.pasajeros}</td>
                       <td className="capitalize">{reserva.estado}</td>
+                      <td className="capitalize">{reserva.estadoPago || "pendiente"}</td>
+                      <td>${Number(reserva.montoTotal || 0).toLocaleString("es-CO")}</td>
+                      <td>
+                        {rol === "cliente" && reserva.estadoPago !== "pagado" && (
+                          <button
+                            type="button"
+                            onClick={() => window.location.assign(`/reservas/pago/${reserva.id}`)}
+                            className="font-semibold text-primario-suave"
+                          >
+                            Pagar
+                          </button>
+                        )}
+                      </td>
                       {esPersonal && (
                         <td>
                           <select
