@@ -1,131 +1,149 @@
-from typing import Annotated
+"""Router de recomendaciones de destinos asistidas por IA (con fallback local)."""
+
+from __future__ import annotations
+
 import re
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy import func, select
+import httpx
+from fastapi import APIRouter
+from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-from app.dependencias import SesionDep, SocioActual
-from app.models.biblioteca import Libro, Prestamo
-from app.schemas.recomendacion import LibroRecomendado, RespuestaDeRecomendacion, SolicitudDeRecomendacion
-from app.services.recomendaciones import ProveedorNoDisponible, ServicioDeRecomendaciones
+from app.core.configuracion import configuracion
+from app.dependencias import SesionDep, UsuarioActual
+from app.errores import ErrorDeDominio
+from app.models.biblioteca import Destino
+from app.services.recomendaciones import (
+    INSTRUCCION_DESTINOS,
+    ProveedorNoDisponible,
+    ServicioDeRecomendaciones,
+)
 
-router = APIRouter(prefix='/recomendaciones', tags=['Recomendaciones'])
-
-
-def obtener_servicio(peticion: Request) -> ServicioDeRecomendaciones:
-    return peticion.app.state.servicio_recomendaciones
-
-
-ServicioIA = Annotated[ServicioDeRecomendaciones, Depends(obtener_servicio)]
+router = APIRouter(prefix="/api/destinos", tags=["Recomendaciones"])
 
 
-async def _catalogo_disponible(sesion: SesionDep) -> list[dict]:
-    consulta = select(Libro).where(Libro.ejemplares_disponibles > 0).limit(40)
-    resultado = await sesion.scalars(consulta)
-    return [
-        {
-            'libro_id': libro.id,
-            'titulo': libro.titulo,
-            'autor': libro.autor.nombre,
-            'categoria': libro.categoria.nombre,
-        }
-        for libro in resultado.unique()
-    ]
+class SolicitudDeRecomendacionDestino(BaseModel):
+    intereses: str = Field(..., min_length=10, max_length=500)
+
+
+class DestinoRecomendado(BaseModel):
+    destino_id: int
+    nombre: str
+    pais: str
+    motivo: str
+    descripcion: str | None = None
+    precio_estimado: float | None = None
+    imagen_slug: str | None = None
+
+
+class RespuestaDeRecomendacionDestino(BaseModel):
+    recomendaciones: list[DestinoRecomendado]
+    generada_por: str
+    aviso: str | None = None
 
 
 def _palabras_clave(texto: str) -> set[str]:
-    return {palabra for palabra in re.findall(r'[\wáéíóúñ]+', texto.lower()) if len(palabra) >= 3}
+    return {palabra for palabra in re.findall(r"[\wáéíóúñ]+", texto.lower()) if len(palabra) >= 3}
 
 
-def _puntaje_local(intereses: str, libro: dict, categoria_popular: int | None) -> int:
+def _puntaje_destino(intereses: str, destino: dict) -> int:
     palabras = _palabras_clave(intereses)
-    texto_libro = f"{libro['titulo']} {libro['autor']} {libro['categoria']}".lower()
+    texto_destino = " ".join(
+        str(destino.get(campo, "")).lower() for campo in ("nombre", "pais", "descripcion")
+    )
 
     puntaje = 0
-    if libro['categoria'] == categoria_popular:
-        puntaje += 3
-
     for palabra in palabras:
-        if palabra in texto_libro:
-            puntaje += 4
+        if palabra in texto_destino:
+            puntaje += 3
 
-    coincidencias_categoria = {
-        'novela': {'novela', 'ficcion', 'ficción', 'misterio', 'suspenso', 'romance', 'aventura'},
-        'memorias': {'memoria', 'memorias', 'autobiografia', 'autobiografía', 'biografia', 'biografía', 'ensayo', 'historia'},
-        'tecnica': {'tecnica', 'técnica', 'tecnologia', 'tecnología', 'programacion', 'programación', 'algoritmo', 'computacion', 'computación'},
-        'infantil': {'infantil', 'niños', 'niñas', 'cuento', 'cuentos'},
-        'referencia': {'referencia', 'consulta', 'manual', 'enciclopedia'},
+    coincidencias = {
+        "playa": {"playa", "mar", "sol", "arena", "caribe", "isla", "snorkel", "descanso"},
+        "cultural": {"cultura", "cultural", "historia", "museo", "patrimonio", "colonial"},
+        "aventura": {"aventura", "montaña", "senderismo", "naturaleza", "ecoturismo"},
+        "urbano": {"urbano", "ciudad", "noche", "modernas", "eventos", "gastronomía"},
+        "romantico": {"romantico", "romántico", "pareja", "escapada", "tranquilo"},
     }
-    for categoria, palabras_categoria in coincidencias_categoria.items():
-        if libro['categoria'] == categoria and palabras.intersection(palabras_categoria):
-            puntaje += 6
+    for grupo in coincidencias.values():
+        if palabras.intersection(grupo) and any(palabra in texto_destino for palabra in grupo):
+            puntaje += 5
 
     return puntaje
 
 
-async def _respaldo_local(sesion: SesionDep, intereses: str) -> list[LibroRecomendado]:
-    categoria_popular = await sesion.scalar(
-        select(Libro.categoria_id)
-        .join(Prestamo, Prestamo.libro_id == Libro.id)
-        .group_by(Libro.categoria_id)
-        .order_by(func.count().desc())
-        .limit(1)
+async def _catalogo_destinos_recomendacion(sesion: SesionDep) -> list[dict]:
+    destinos = await sesion.scalars(
+        select(Destino)
+        .options(selectinload(Destino.pais))
+        .where(Destino.activo.is_(True))
+        .where(Destino.precio_base > 0)
+        .order_by(Destino.nombre.asc())
     )
-    resultado = await sesion.scalars(
-        select(Libro).where(Libro.ejemplares_disponibles > 0).limit(40)
-    )
-    libros = list(resultado.unique())
-    libros.sort(
-        key=lambda libro: (
-            -_puntaje_local(
-                intereses,
-                {
-                    'libro_id': libro.id,
-                    'titulo': libro.titulo,
-                    'categoria': libro.categoria.nombre,
-                    'autor': libro.autor.nombre,
-                },
-                categoria_popular,
-            ),
-            libro.titulo,
-            libro.id,
-        )
-    )
-
     return [
-        LibroRecomendado(
-            libro_id=libro.id,
-            titulo=libro.titulo,
-            motivo=f'Coincide con tus intereses y está disponible en {libro.categoria.nombre}.',
-        )
-        for libro in libros[:3]
+        {
+            "destino_id": destino.id,
+            "nombre": destino.nombre,
+            "pais": destino.pais.nombre if destino.pais else "",
+            "descripcion": destino.descripcion,
+            "precio_estimado": float(destino.precio_base or 0),
+            "imagen_slug": destino.imagen_slug,
+        }
+        for destino in destinos
     ]
 
 
-@router.post(
-    '',
-    response_model=RespuestaDeRecomendacion,
-    summary='Recomendar tres libros a partir de los intereses del socio',
-)
-async def recomendar(sesion: SesionDep, datos: SolicitudDeRecomendacion, servicio: ServicioIA, socio: SocioActual):
-    catalogo = await _catalogo_disponible(sesion)
-    titulos_validos = {libro['libro_id'] for libro in catalogo}
+def _respaldo_destinos_local(intereses: str, catalogo: list[dict]) -> list[dict]:
+    destinos_ordenados = sorted(
+        catalogo,
+        key=lambda destino: (
+            -_puntaje_destino(intereses, destino),
+            destino.get("precio_estimado", 0) or 0,
+            destino.get("nombre", ""),
+            destino.get("destino_id", 0),
+        ),
+    )
+    resultados: list[dict] = []
+    for destino in destinos_ordenados[:3]:
+        resultados.append(
+            {
+                "destino_id": destino["destino_id"],
+                "nombre": destino["nombre"],
+                "pais": destino["pais"],
+                "motivo": f"Coincide con tus intereses y encaja con un viaje a {destino['pais']}.",
+                "descripcion": destino.get("descripcion"),
+                "precio_estimado": destino.get("precio_estimado"),
+                "imagen_slug": destino.get("imagen_slug"),
+            }
+        )
+    return resultados
+
+
+@router.post("/recomendaciones", response_model=RespuestaDeRecomendacionDestino)
+async def recomendar_destinos(
+    payload: SolicitudDeRecomendacionDestino,
+    sesion: SesionDep,
+    _usuario: UsuarioActual,
+):
+    catalogo = await _catalogo_destinos_recomendacion(sesion)
+    if not catalogo:
+        raise ErrorDeDominio("No hay destinos disponibles para recomendar.")
 
     try:
-        crudas = await servicio.recomendar(datos.intereses, catalogo)
-    except ProveedorNoDisponible:
-        return RespuestaDeRecomendacion(
-            recomendaciones=await _respaldo_local(sesion, datos.intereses),
-            generada_por='catalogo_local',
-            aviso='El asistente no está disponible en este momento; estas sugerencias vienen del catálogo.',
+        async with httpx.AsyncClient(timeout=configuracion.proveedor_ia_timeout) as cliente:
+            servicio = ServicioDeRecomendaciones(cliente)
+            crudas = await servicio.recomendar(payload.intereses, catalogo, instruccion=INSTRUCCION_DESTINOS)
+        recomendaciones = [
+            DestinoRecomendado(**item)
+            for item in crudas
+            if item.get("destino_id") in {destino["destino_id"] for destino in catalogo}
+        ]
+        if not recomendaciones:
+            raise ProveedorNoDisponible("El proveedor devolvió destinos que no están en el catálogo.")
+        return RespuestaDeRecomendacionDestino(recomendaciones=recomendaciones[:3], generada_por="modelo_externo")
+    except (ProveedorNoDisponible, ValidationError):
+        return RespuestaDeRecomendacionDestino(
+            recomendaciones=[DestinoRecomendado(**item) for item in _respaldo_destinos_local(payload.intereses, catalogo)],
+            generada_por="catalogo_local",
+            aviso="El asistente no está disponible en este momento; estas sugerencias vienen del catálogo.",
         )
-
-    validas = [LibroRecomendado(**item) for item in crudas if item.get('libro_id') in titulos_validos]
-    if not validas:
-        return RespuestaDeRecomendacion(
-            recomendaciones=await _respaldo_local(sesion, datos.intereses),
-            generada_por='catalogo_local',
-            aviso='El asistente sugirió libros que no están en el catálogo.',
-        )
-
-    return RespuestaDeRecomendacion(recomendaciones=validas, generada_por='modelo_externo')
