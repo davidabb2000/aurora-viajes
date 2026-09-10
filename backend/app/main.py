@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from urllib.parse import urlencode
+from app.routers.recomendaciones import router as router_recomendaciones
 
 import jwt
 import httpx
