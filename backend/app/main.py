@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from urllib.parse import urlencode
-from app.routers.recomendaciones import router as router_recomendaciones
 
 import jwt
 import httpx
@@ -38,7 +37,7 @@ from app.models.biblioteca import (
     TipoDocumento,
     User,
 )
-from app.services.recomendaciones import ProveedorNoDisponible, ServicioDeRecomendaciones
+from app.routers.recomendaciones import router as router_recomendaciones
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
@@ -93,13 +92,6 @@ METODOS_PAGO_SEMILLA = [
 ]
 
 FACTOR_STRIPE_MONEDA = Decimal("100")
-INSTRUCCION_DESTINOS = (
-    "Eres el asistente de una agencia de viajes. A partir de los intereses "
-    "del usuario y del catálogo disponible, elige exactamente 3 destinos. "
-    "Responde ÚNICAMENTE con un arreglo JSON de objetos con las claves "
-    "destino_id, nombre, pais y motivo. El motivo debe tener máximo 25 palabras. "
-    "No recomiendes destinos que no estén en el catálogo."
-)
 
 
 class UserCreate(BaseModel):
@@ -293,26 +285,6 @@ class ContactoCreate(BaseModel):
         if "@" not in value or "." not in value.split("@")[-1]:
             raise ValueError("Correo electrónico inválido.")
         return value
-
-
-class SolicitudDeRecomendacionDestino(BaseModel):
-    intereses: str = Field(..., min_length=10, max_length=500)
-
-
-class DestinoRecomendado(BaseModel):
-    destino_id: int
-    nombre: str
-    pais: str
-    motivo: str
-    descripcion: str | None = None
-    precio_estimado: float | None = None
-    imagen_slug: str | None = None
-
-
-class RespuestaDeRecomendacionDestino(BaseModel):
-    recomendaciones: list[DestinoRecomendado]
-    generada_por: str
-    aviso: str | None = None
 
 
 def _usuario_a_dict(usuario: User) -> dict:
@@ -583,87 +555,6 @@ def _calcular_monto_reserva(destino: Destino, fecha_salida: date, fecha_regreso:
     return Decimal(destino.precio_base or 0) * Decimal(str(pasajeros)) * Decimal(str(dias))
 
 
-def _palabras_clave(texto: str) -> set[str]:
-    return {palabra for palabra in re.findall(r"[\wáéíóúñ]+", texto.lower()) if len(palabra) >= 3}
-
-
-def _puntaje_destino(intereses: str, destino: dict) -> int:
-    palabras = _palabras_clave(intereses)
-    texto_destino = " ".join(
-        str(destino.get(campo, "")).lower()
-        for campo in ("nombre", "pais", "descripcion")
-    )
-
-    puntaje = 0
-    for palabra in palabras:
-        if palabra in texto_destino:
-            puntaje += 3
-
-    coincidencias = {
-        "playa": {"playa", "mar", "sol", "arena", "caribe", "isla", "snorkel", "descanso"},
-        "cultural": {"cultura", "cultural", "historia", "museo", "patrimonio", "colonial"},
-        "aventura": {"aventura", "montaña", "senderismo", "naturaleza", "ecoturismo"},
-        "urbano": {"urbano", "ciudad", "noche", "modernas", "eventos", "gastronomía"},
-        "romantico": {"romantico", "romántico", "pareja", "escapada", "tranquilo"},
-    }
-    for grupo in coincidencias.values():
-        if palabras.intersection(grupo) and any(palabra in texto_destino for palabra in grupo):
-            puntaje += 5
-
-    return puntaje
-
-
-async def _catalogo_destinos_recomendacion(sesion: SesionDep) -> list[dict]:
-    destinos = await sesion.scalars(
-        select(Destino)
-        .options(selectinload(Destino.pais))
-        .where(Destino.activo.is_(True))
-        .where(Destino.precio_base > 0)
-        .order_by(Destino.nombre.asc())
-    )
-    return [
-        {
-            "destino_id": destino.id,
-            "nombre": destino.nombre,
-            "pais": destino.pais.nombre if destino.pais else "",
-            "descripcion": destino.descripcion,
-            "precio_estimado": float(destino.precio_base or 0),
-            "imagen_slug": destino.imagen_slug,
-        }
-        for destino in destinos
-    ]
-
-
-def _respaldo_destinos_local(intereses: str, catalogo: list[dict]) -> list[dict]:
-    destinos_ordenados = sorted(
-        catalogo,
-        key=lambda destino: (
-            -_puntaje_destino(intereses, destino),
-            destino.get("precio_estimado", 0) or 0,
-            destino.get("nombre", ""),
-            destino.get("destino_id", 0),
-        ),
-    )
-    resultados: list[dict] = []
-    for destino in destinos_ordenados[:3]:
-        resultados.append(
-            {
-                "destino_id": destino["destino_id"],
-                "nombre": destino["nombre"],
-                "pais": destino["pais"],
-                "motivo": f"Coincide con tus intereses y encaja con un viaje a {destino['pais']}.",
-                "descripcion": destino.get("descripcion"),
-                "precio_estimado": destino.get("precio_estimado"),
-                "imagen_slug": destino.get("imagen_slug"),
-            }
-        )
-    return resultados
-
-
-def _normalizar_recomendaciones_destinos(crudas: list[dict]) -> list[DestinoRecomendado]:
-    return [DestinoRecomendado(**item) for item in crudas]
-
-
 async def _stripe_crear_checkout(reserva: Reserva) -> dict:
     if not _stripe_configurado():
         raise ErrorDeDominio("Stripe no está configurado. Define STRIPE_SECRET_KEY para habilitar pagos reales.")
@@ -912,6 +803,8 @@ app.add_middleware(
     expose_headers=["X-Peticion-Id", "X-Tiempo-Respuesta-ms"],
 )
 
+app.include_router(router_recomendaciones)
+
 
 def _respuesta_error(peticion: Request, estado: int, codigo: str, mensaje: str, detalles=None):
     return JSONResponse(status_code=estado, content={"codigo": codigo, "mensaje": mensaje, "ruta": peticion.url.path, "detalles": detalles})
@@ -987,30 +880,6 @@ async def catalogo_destinos(sesion: SesionDep):
         }
         for destino in destinos
     ]
-
-
-@app.post("/api/destinos/recomendaciones", response_model=RespuestaDeRecomendacionDestino)
-async def recomendar_destinos(payload: SolicitudDeRecomendacionDestino, sesion: SesionDep, _usuario: UsuarioActual):
-    catalogo = await _catalogo_destinos_recomendacion(sesion)
-    if not catalogo:
-        raise ErrorDeDominio("No hay destinos disponibles para recomendar.")
-
-    try:
-        async with httpx.AsyncClient(timeout=configuracion.proveedor_ia_timeout) as cliente:
-            servicio = ServicioDeRecomendaciones(cliente)
-            crudas = await servicio.recomendar(payload.intereses, catalogo, instruccion=INSTRUCCION_DESTINOS)
-        recomendaciones = _normalizar_recomendaciones_destinos(
-            [item for item in crudas if item.get("destino_id") in {destino["destino_id"] for destino in catalogo}]
-        )
-        if not recomendaciones:
-            raise ProveedorNoDisponible("El proveedor devolvió destinos que no están en el catálogo.")
-        return RespuestaDeRecomendacionDestino(recomendaciones=recomendaciones[:3], generada_por="modelo_externo")
-    except (ProveedorNoDisponible, ValidationError):
-        return RespuestaDeRecomendacionDestino(
-            recomendaciones=[DestinoRecomendado(**item) for item in _respaldo_destinos_local(payload.intereses, catalogo)],
-            generada_por="catalogo_local",
-            aviso="El asistente no está disponible en este momento; estas sugerencias vienen del catálogo.",
-        )
 
 
 @app.post("/api/auth/login")
