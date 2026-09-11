@@ -16,9 +16,11 @@ logger = logging.getLogger("aurora-viajes.ia")
 INSTRUCCION_DESTINOS = (
     "Eres el asistente virtual de la agencia de viajes Aurora Viajes. A partir de las preferencias "
     "del viajero y del catálogo de destinos disponibles, selecciona exactamente 3 destinos ideales. "
-    "Responde ÚNICAMENTE con un arreglo JSON de objetos con las claves: "
-    "destino_id, nombre y motivo. El motivo debe explicar por qué encaja en máximo 25 palabras. "
+    "Responde ÚNICAMENTE con un objeto JSON con una única clave 'recomendaciones', cuyo valor sea un "
+    "arreglo de objetos con las claves: destino_id, nombre y motivo. "
+    "El motivo debe explicar por qué encaja en máximo 25 palabras, en español, sin mezclar otros idiomas. "
     "Usa obligatoriamente el 'id' del catálogo como 'destino_id'. "
+    "No agregues texto, comentarios ni explicaciones fuera del JSON. "
     "No recomiendes destinos que no estén en el catálogo."
 )
 
@@ -58,7 +60,8 @@ class ServicioDeRecomendaciones:
         cuerpo = {
             "model": configuracion.proveedor_ia_modelo,
             "max_tokens": 800,
-            "temperature": 0.2,
+            "temperature": 0.1,
+            "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": instruccion},
                 {
@@ -133,22 +136,22 @@ class ServicioDeRecomendaciones:
                 "Respuesta del proveedor ilegible."
             ) from exc
 
-        # 1. Extraer bloque array [...] si viene envuelto en explicaciones o markdown
-        match_lista = re.search(r"\[\s*\{.*?\}\s*\]", texto, re.DOTALL)
-        if match_lista:
-            texto_json = match_lista.group(0)
-        else:
-            # 2. Si viene envuelto en un objeto general tipo {"destinos": [...]}
-            match_objeto = re.search(r"\{.*\}", texto, re.DOTALL)
-            texto_json = match_objeto.group(0) if match_objeto else texto
-
+        # 1. Intentar parsear directo (esperado con response_format json_object)
+        datos = None
         try:
-            datos = json.loads(texto_json)
-        except json.JSONDecodeError as exc:
+            datos = json.loads(texto)
+        except json.JSONDecodeError:
+            pass
+
+        # 2. Si falló, buscar el primer arreglo [...] balanceado dentro del texto
+        if datos is None:
+            datos = ServicioDeRecomendaciones._extraer_primer_json_balanceado(texto)
+
+        if datos is None:
             logger.error("JSON inválido de Groq. Respuesta cruda: %s", texto)
             raise ProveedorNoDisponible(
                 "El proveedor no devolvió JSON válido."
-            ) from exc
+            )
 
         # Si devolvió un dict con una lista dentro, extraer la lista
         if isinstance(datos, dict):
@@ -164,3 +167,26 @@ class ServicioDeRecomendaciones:
             )
 
         return datos[:3]
+
+    @staticmethod
+    def _extraer_primer_json_balanceado(texto: str) -> list | dict | None:
+        """Busca el primer objeto/arreglo JSON balanceado, ignorando texto
+        alucinado que quede después de que el modelo ya cerró el JSON."""
+        for apertura, cierre in (("[", "]"), ("{", "}")):
+            inicio = texto.find(apertura)
+            if inicio == -1:
+                continue
+            profundidad = 0
+            for indice in range(inicio, len(texto)):
+                caracter = texto[indice]
+                if caracter == apertura:
+                    profundidad += 1
+                elif caracter == cierre:
+                    profundidad -= 1
+                    if profundidad == 0:
+                        fragmento = texto[inicio : indice + 1]
+                        try:
+                            return json.loads(fragmento)
+                        except json.JSONDecodeError:
+                            break
+        return None
