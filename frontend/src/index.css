@@ -43,9 +43,27 @@ h3 {
   flex-direction: column;
 }
 
+@keyframes desplazar-logos {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@theme {
+  --animate-desplazar-logos: desplazar-logos 75s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .animate-desplazar-logos {
+    animation-duration: 75s !important;
   }
 }

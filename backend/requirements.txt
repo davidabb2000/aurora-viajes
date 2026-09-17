@@ -1,5 +1,6 @@
 aiosqlite==0.20.0
 aiomysql==0.2.0
+aiosmtplib==3.0.1
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2

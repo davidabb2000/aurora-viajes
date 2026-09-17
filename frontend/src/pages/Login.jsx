@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { NavLink } from "react-router-dom";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import RecoverPassword from "../components/RecoverPassword";
@@ -69,8 +70,12 @@ function Login() {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-14">
+    <div className="flex flex-1 flex-col items-center justify-center px-4 py-14">
       <div className="w-full max-w-md rounded-lg border border-borde bg-superficie p-7 shadow-[0_20px_40px_-24px_rgba(15,61,62,0.35)] sm:p-9">
+        <NavLink to="/" className="mb-6 flex items-center justify-center gap-2 font-display text-2xl font-bold text-primario no-underline">
+          <span className="text-acento">✦</span>
+          Aurora Viajes
+        </NavLink>
         <span className="mb-2 inline-block text-xs font-semibold uppercase tracking-widest text-primario-suave">
           Bienvenido de vuelta
         </span>

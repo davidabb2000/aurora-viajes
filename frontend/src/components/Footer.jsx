@@ -1,10 +1,20 @@
 import { Link } from "react-router-dom";
+import GoogleMap from "./GoogleMap";
 
 function Footer() {
   const anioActual = new Date().getFullYear();
 
   return (
-    <footer className="mt-16 border-t-4 border-acento bg-primario-oscuro text-[#e7e2d4]">
+    <footer className="mt-16 bg-primario-oscuro text-[#e7e2d4]">
+      {/* Sección de mapa */}
+      <div className="border-t-4 border-acento py-12">
+        <div className="mx-auto w-[92%] max-w-[1100px]">
+          <h3 className="mb-6 text-lg font-bold text-white">Encuéntranos</h3>
+          <GoogleMap />
+        </div>
+      </div>
+
+      {/* Sección de contenido del footer */}
       <div className="mx-auto grid w-[92%] max-w-[1100px] grid-cols-1 gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <p className="mb-3 flex items-center gap-2 font-display text-xl font-bold text-white"><span className="text-acento">✦</span>Aurora Viajes</p>

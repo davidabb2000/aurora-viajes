@@ -1,7 +1,9 @@
 import logging
 import re
+import secrets
+import unicodedata
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -19,24 +21,34 @@ from sqlalchemy.orm import selectinload
 from app.core.base_datos import Base, FabricaDeSesiones, motor
 from app.core.configuracion import configuracion
 from app.core.seguridad import crear_token, hashear_contrasena, verificar_contrasena
+from app.services.correos import enviar_correo_recuperacion, enviar_correo_bienvenida, enviar_correo_reserva
 from app.dependencias import Administrador, EmpleadoOAdmin, ReservaDeRuta, SesionDep, UsuarioActual, UsuarioDeRuta
 from app.errores import ConflictoDeNegocio, ErrorDeDominio, NoAutenticado, PermisoDenegado, RecursoNoEncontrado
 from app.middlewares import cabeceras_de_seguridad, registrar_peticion
 from app.models.biblioteca import (
     Destino,
+    DetalleFactura,
+    DetalleVenta,
     EstadoPago,
     EstadoReserva,
+    Excursion,
+    Hotel,
     MensajeContacto,
     MetodoPago,
+    Factura,
     Pais,
     Permiso,
     Producto,
+    Paquete,
     Reserva,
     Role,
     Servicio,
     TipoDocumento,
     User,
+    Venta,
+    Vuelo,
 )
+from app.routers.comercial import router as router_comercial
 from app.routers.recomendaciones import router as router_recomendaciones
 
 
@@ -72,6 +84,11 @@ PAISES_Y_DESTINOS_SEMILLA = [
     ("Islandia", "Reikiavik, Islandia", "Auroras boreales, fuentes termales y paisajes volcánicos al borde del Atlántico Norte.", "reikiavik", Decimal("10800000")),
     ("Estados Unidos", "Nueva York, EE. UU.", "Rascacielos icónicos, parques urbanos y una energía que nunca duerme.", "nueva-york", Decimal("7200000")),
     ("Egipto", "El Cairo, Egipto", "Las pirámides de Giza y el Nilo milenario te acercan a una de las civilizaciones más fascinantes de la historia.", "cairo", Decimal("9300000")),
+]
+
+VUELOS_SEMILLA = [
+    ("AV101", "Aurora Airlines", "Airbus A320", "Bogotá", "París", datetime(2026, 10, 5, 8, 30), datetime(2026, 10, 5, 23, 15), 180, "A12", "1"),
+    ("AV202", "Aurora Airlines", "Boeing 787", "Bogotá", "Tokio", datetime(2026, 10, 12, 10, 0), datetime(2026, 10, 13, 8, 30), 260, "B04", "2"),
 ]
 
 ESTADOS_RESERVA_SEMILLA = [
@@ -239,9 +256,126 @@ class ServicioCreate(BaseModel):
     activo: bool = True
 
 
+ESTADOS_VUELO_VALIDOS = {"programado", "abordando", "en_vuelo", "aterrizado", "cancelado"}
+AEROLINEAS_DISPONIBLES = {"Aurora Airlines", "Avianca", "LATAM", "Copa Airlines", "Iberia"}
+AVIONES_DISPONIBLES = {"Airbus A320", "Airbus A330", "Boeing 737", "Boeing 787", "Embraer E195"}
+CAPACIDAD_POR_AVION = {
+    "Airbus A320": 180,
+    "Airbus A330": 300,
+    "Boeing 737": 189,
+    "Boeing 787": 330,
+    "Embraer E195": 132,
+}
+ORIGENES_DISPONIBLES = {"Bogotá", "Medellín", "Cali", "Cartagena", "Barranquilla", "Lima", "Madrid"}
+
+
+class VueloCreate(BaseModel):
+    numeroVuelo: str | None = Field(default=None, min_length=2, max_length=20)
+    aerolinea: str = Field(..., min_length=2, max_length=80)
+    avion: str = Field(..., min_length=2, max_length=80)
+    origen: str = Field(..., min_length=2, max_length=120)
+    destino: str = Field(..., min_length=2, max_length=120)
+    fechaSalida: datetime
+    fechaLlegada: datetime
+    capacidadMaxima: int | None = Field(default=None, ge=1, le=1000)
+    puerta: str | None = Field(default=None, max_length=10)
+    terminal: str | None = Field(default=None, max_length=20)
+    estado: str = "programado"
+    activo: bool = True
+
+    @field_validator("aerolinea", "avion", "origen", "destino")
+    @classmethod
+    def validar_texto(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Este campo es obligatorio.")
+        return value
+
+    @field_validator("aerolinea")
+    @classmethod
+    def validar_aerolinea(cls, value: str) -> str:
+        if value not in AEROLINEAS_DISPONIBLES:
+            raise ValueError("Selecciona una aerolínea válida.")
+        return value
+
+    @field_validator("avion")
+    @classmethod
+    def validar_avion(cls, value: str) -> str:
+        if value not in AVIONES_DISPONIBLES:
+            raise ValueError("Selecciona un avión válido.")
+        return value
+
+    @field_validator("origen")
+    @classmethod
+    def validar_origen(cls, value: str) -> str:
+        if value not in ORIGENES_DISPONIBLES:
+            raise ValueError("Selecciona un origen válido del catálogo.")
+        return value
+
+    @field_validator("estado")
+    @classmethod
+    def validar_estado(cls, value: str) -> str:
+        if value not in ESTADOS_VUELO_VALIDOS:
+            raise ValueError("Estado de vuelo no válido.")
+        return value
+
+    @model_validator(mode="after")
+    def validar_horario(self):
+        if self.fechaLlegada <= self.fechaSalida:
+            raise ValueError("La llegada debe ser posterior a la salida.")
+        self.capacidadMaxima = CAPACIDAD_POR_AVION[self.avion]
+        return self
+
+
+class HotelCreate(BaseModel):
+    nombre: str = Field(..., min_length=2, max_length=120)
+    ciudad: str = Field(..., min_length=2, max_length=120)
+    pais: str = Field(..., min_length=2, max_length=120)
+    estrellas: int = Field(..., ge=1, le=5)
+    precioNoche: float = Field(default=0, ge=0)
+    descripcion: str | None = Field(default=None, max_length=1000)
+    activo: bool = True
+
+
+class ExcursionCreate(BaseModel):
+    nombre: str = Field(..., min_length=2, max_length=120)
+    ciudad: str = Field(..., min_length=2, max_length=120)
+    pais: str = Field(..., min_length=2, max_length=120)
+    duracionHoras: int = Field(..., ge=1, le=48)
+    precio: float = Field(default=0, ge=0)
+    descripcion: str | None = Field(default=None, max_length=1000)
+    activo: bool = True
+
+
+class PaqueteCreate(BaseModel):
+    nombre: str = Field(..., min_length=3, max_length=140)
+    destinoId: int = Field(..., ge=1)
+    vueloId: int | None = Field(default=None, ge=1)
+    vuelo: VueloCreate | None = None
+    hotelId: int = Field(..., ge=1)
+    excursionIds: list[int] = Field(default_factory=list, max_length=20)
+    fechaSalida: date
+    fechaRegreso: date
+    precioBase: float = Field(default=0, ge=0)
+    activo: bool = True
+
+    @model_validator(mode="after")
+    def validar_fechas(self):
+        if self.fechaRegreso < self.fechaSalida:
+            raise ValueError("La fecha de regreso debe ser posterior a la salida.")
+        if self.vueloId is None and self.vuelo is None:
+            raise ValueError("Debes configurar el vuelo dentro de la reserva.")
+        if self.vueloId is not None and self.vuelo is not None:
+            raise ValueError("Usa un vuelo existente o configura uno nuevo, no ambos.")
+        return self
+
+
 class ReservaCreate(BaseModel):
+    origen: str = Field(..., min_length=2, max_length=120)
     destino: str | None = Field(default=None, min_length=1, max_length=120)
     destinoId: int | None = Field(default=None, ge=1)
+    vueloId: int | None = Field(default=None, ge=1)
+    paqueteId: int | None = Field(default=None, ge=1)
     fechaSalida: date
     fechaRegreso: date
     pasajeros: int = Field(..., ge=1, le=9)
@@ -259,6 +393,14 @@ class ReservaCreate(BaseModel):
     def validar_telefono(cls, value: str) -> str:
         if not value.isdigit():
             raise ValueError("Solo se permiten números.")
+        return value
+
+    @field_validator("origen")
+    @classmethod
+    def validar_origen(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Selecciona un lugar de salida.")
         return value
 
 
@@ -333,6 +475,68 @@ def _servicio_a_dict(servicio: Servicio) -> dict:
     }
 
 
+def _vuelo_a_dict(vuelo: Vuelo) -> dict:
+    return {
+        "id": vuelo.id,
+        "numeroVuelo": vuelo.numero_vuelo,
+        "aerolinea": vuelo.aerolinea,
+        "avion": vuelo.avion,
+        "origen": vuelo.origen,
+        "destino": vuelo.destino,
+        "fechaSalida": vuelo.fecha_salida.isoformat(),
+        "fechaLlegada": vuelo.fecha_llegada.isoformat(),
+        "capacidadMaxima": vuelo.capacidad_maxima,
+        "puerta": vuelo.puerta,
+        "terminal": vuelo.terminal,
+        "estado": vuelo.estado,
+        "activo": vuelo.activo,
+    }
+
+
+def _hotel_a_dict(hotel: Hotel) -> dict:
+    return {
+        "id": hotel.id,
+        "nombre": hotel.nombre,
+        "ciudad": hotel.ciudad,
+        "pais": hotel.pais,
+        "estrellas": hotel.estrellas,
+        "precioNoche": float(hotel.precio_noche or 0),
+        "descripcion": hotel.descripcion,
+        "activo": hotel.activo,
+    }
+
+
+def _excursion_a_dict(excursion: Excursion) -> dict:
+    return {
+        "id": excursion.id,
+        "nombre": excursion.nombre,
+        "ciudad": excursion.ciudad,
+        "pais": excursion.pais,
+        "duracionHoras": excursion.duracion_horas,
+        "precio": float(excursion.precio or 0),
+        "descripcion": excursion.descripcion,
+        "activo": excursion.activo,
+    }
+
+
+def _paquete_a_dict(paquete: Paquete) -> dict:
+    return {
+        "id": paquete.id,
+        "nombre": paquete.nombre,
+        "destinoId": paquete.destino_id,
+        "destino": paquete.destino_rel.nombre if paquete.destino_rel else "",
+        "vueloId": paquete.vuelo_id,
+        "vuelo": _vuelo_a_dict(paquete.vuelo_rel),
+        "hotelId": paquete.hotel_id,
+        "hotel": _hotel_a_dict(paquete.hotel_rel),
+        "excursiones": [_excursion_a_dict(excursion) for excursion in paquete.excursiones],
+        "fechaSalida": paquete.fecha_salida.isoformat(),
+        "fechaRegreso": paquete.fecha_regreso.isoformat(),
+        "precioBase": float(paquete.precio_base or 0),
+        "activo": paquete.activo,
+    }
+
+
 def _reserva_a_dict(reserva: Reserva) -> dict:
     return {
         "id": reserva.id,
@@ -340,6 +544,11 @@ def _reserva_a_dict(reserva: Reserva) -> dict:
         "destinoId": reserva.destino_id,
         "destino": reserva.destino_rel.nombre if reserva.destino_rel else "",
         "pais": reserva.destino_rel.pais.nombre if reserva.destino_rel and reserva.destino_rel.pais else "",
+        "origen": reserva.vuelo_rel.origen if reserva.vuelo_rel else "",
+        "vueloId": reserva.vuelo_id,
+        "vuelo": _vuelo_a_dict(reserva.vuelo_rel) if reserva.vuelo_rel else None,
+        "paqueteId": reserva.paquete_id,
+        "paquete": _paquete_a_dict(reserva.paquete_rel) if reserva.paquete_rel else None,
         "fechaSalida": reserva.fecha_salida.isoformat(),
         "fechaRegreso": reserva.fecha_regreso.isoformat(),
         "pasajeros": reserva.pasajeros,
@@ -360,6 +569,16 @@ def _clausula_no_duplicados(sesion: SesionDep) -> str:
 async def _asegurar_base_inicial() -> None:
     async with motor.begin() as conexion:
         await conexion.run_sync(Base.metadata.create_all)
+        for tabla in ("hoteles", "excursiones"):
+            if conexion.dialect.name == "mysql":
+                columnas = await conexion.execute(text(f"SHOW COLUMNS FROM {tabla} LIKE 'pais'"))
+                existe_pais = columnas.first() is not None
+            else:
+                columnas = await conexion.execute(text(f"PRAGMA table_info({tabla})"))
+                existe_pais = any(columna[1] == "pais" for columna in columnas.fetchall())
+            if not existe_pais:
+                posicion = " AFTER ciudad" if conexion.dialect.name == "mysql" else ""
+                await conexion.execute(text(f"ALTER TABLE {tabla} ADD COLUMN pais VARCHAR(120) NOT NULL DEFAULT ''{posicion}"))
     async with FabricaDeSesiones() as sesion:
         clausula = _clausula_no_duplicados(sesion)
 
@@ -402,6 +621,26 @@ async def _asegurar_base_inicial() -> None:
                 destino.imagen_slug = slug
                 destino.activo = True
             destinos_cache[nombre] = destino
+
+        for numero, aerolinea, avion, origen, destino, salida, llegada, capacidad, puerta, terminal in VUELOS_SEMILLA:
+            vuelo = await sesion.scalar(select(Vuelo).where(Vuelo.numero_vuelo == numero))
+            if vuelo is None:
+                sesion.add(
+                    Vuelo(
+                        numero_vuelo=numero,
+                        aerolinea=aerolinea,
+                        avion=avion,
+                        origen=origen,
+                        destino=destino,
+                        fecha_salida=salida,
+                        fecha_llegada=llegada,
+                        capacidad_maxima=capacidad,
+                        puerta=puerta,
+                        terminal=terminal,
+                        estado="programado",
+                        activo=True,
+                    )
+                )
 
         estados_reserva_cache: dict[str, EstadoReserva] = {}
         for codigo, nombre in ESTADOS_RESERVA_SEMILLA:
@@ -555,6 +794,73 @@ def _calcular_monto_reserva(destino: Destino, fecha_salida: date, fecha_regreso:
     return Decimal(destino.precio_base or 0) * Decimal(str(pasajeros)) * Decimal(str(dias))
 
 
+def _normalizar_texto(value: str) -> str:
+    texto = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    return " ".join(texto.lower().split())
+
+
+def _puerta_terminal_por_ruta(origen: str, destino: str) -> tuple[str, str]:
+    codigo_origen = _normalizar_texto(origen)[:3].upper()
+    codigo_destino = _normalizar_texto(destino)[:3].upper()
+    numero_puerta = (sum(ord(caracter) for caracter in codigo_origen + codigo_destino) % 20) + 1
+    terminal = "A" if codigo_destino < "M" else "B"
+    return f"{terminal}{numero_puerta:02d}", terminal
+
+
+async def _generar_numero_vuelo(sesion: SesionDep) -> str:
+    while True:
+        numero = f"AV-{secrets.randbelow(1_000_000):06d}"
+        if await sesion.scalar(select(Vuelo.id).where(Vuelo.numero_vuelo == numero)) is None:
+            return numero
+
+
+async def _resolver_vuelo_reserva(
+    sesion: SesionDep,
+    payload: ReservaCreate,
+    destino: Destino,
+    reserva_id: int | None = None,
+) -> Vuelo:
+    vuelos = list(
+        await sesion.scalars(
+            select(Vuelo)
+            .where(Vuelo.activo.is_(True), Vuelo.estado.in_({"programado", "abordando"}))
+            .order_by(Vuelo.fecha_salida.asc())
+        )
+    )
+    destino_normalizado = _normalizar_texto(destino.nombre)
+    candidatos = [
+        vuelo
+        for vuelo in vuelos
+        if vuelo.fecha_salida.date() == payload.fechaSalida
+        and _normalizar_texto(vuelo.origen) == _normalizar_texto(payload.origen)
+        and (
+            _normalizar_texto(vuelo.destino) == destino_normalizado
+            or _normalizar_texto(vuelo.destino) in destino_normalizado
+            or destino_normalizado in _normalizar_texto(vuelo.destino)
+        )
+    ]
+    if payload.vueloId is not None:
+        candidatos = [vuelo for vuelo in candidatos if vuelo.id == payload.vueloId]
+    if not candidatos:
+        raise ErrorDeDominio("No hay un vuelo activo para ese destino y fecha de salida.")
+
+    estado_cancelado_id = await _resolver_estado_reserva_id(sesion, "cancelada")
+    for vuelo in candidatos:
+        condiciones = [
+            Reserva.vuelo_id == vuelo.id,
+            Reserva.estado_id != estado_cancelado_id,
+        ]
+        if reserva_id is not None:
+            condiciones.append(Reserva.id != reserva_id)
+        pasajeros_asignados = await sesion.scalar(
+            select(func.coalesce(func.sum(Reserva.pasajeros), 0)).where(*condiciones)
+        )
+        if int(pasajeros_asignados or 0) + payload.pasajeros <= vuelo.capacidad_maxima:
+            return vuelo
+
+    raise ErrorDeDominio("El vuelo seleccionado no tiene capacidad para todos los pasajeros.")
+
+
 async def _stripe_crear_checkout(reserva: Reserva) -> dict:
     if not _stripe_configurado():
         raise ErrorDeDominio("Stripe no está configurado. Define STRIPE_SECRET_KEY para habilitar pagos reales.")
@@ -623,9 +929,41 @@ async def _columna_existe(sesion: SesionDep, tabla: str, columna: str) -> bool:
     return False
 
 
+async def _restriccion_existe(sesion: SesionDep, tabla: str, restriccion: str) -> bool:
+    if sesion.bind and sesion.bind.dialect.name == "mysql":
+        cantidad = await sesion.scalar(
+            text(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                "WHERE table_schema = DATABASE() AND table_name = :tabla "
+                "AND constraint_name = :restriccion"
+            ),
+            {"tabla": tabla, "restriccion": restriccion},
+        )
+        return bool(cantidad)
+    return False
+
+
 async def _migrar_esquema_legacy(sesion: SesionDep) -> None:
     if not sesion.bind or sesion.bind.dialect.name != "mysql":
         return
+
+    if not await _columna_existe(sesion, "reservas", "paquete_id"):
+        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN paquete_id INT NULL AFTER vuelo_id"))
+        await sesion.execute(
+            text(
+                "ALTER TABLE reservas ADD CONSTRAINT fk_reserva_paquete "
+                "FOREIGN KEY (paquete_id) REFERENCES paquetes(id) ON DELETE RESTRICT"
+            )
+        )
+    else:
+        await sesion.execute(text("ALTER TABLE reservas MODIFY COLUMN paquete_id INT NULL"))
+        if not await _restriccion_existe(sesion, "reservas", "fk_reserva_paquete"):
+            await sesion.execute(
+                text(
+                    "ALTER TABLE reservas ADD CONSTRAINT fk_reserva_paquete "
+                    "FOREIGN KEY (paquete_id) REFERENCES paquetes(id) ON DELETE RESTRICT"
+                )
+            )
 
     if await _columna_existe(sesion, "usuarios", "tipo_documento") and not await _columna_existe(sesion, "usuarios", "tipo_documento_id"):
         await sesion.execute(text("ALTER TABLE usuarios ADD COLUMN tipo_documento_id INT UNSIGNED NULL AFTER apellido"))
@@ -754,6 +1092,15 @@ async def _migrar_esquema_legacy(sesion: SesionDep) -> None:
         await sesion.execute(text("ALTER TABLE reservas DROP COLUMN estado_pago"))
         await sesion.execute(text("ALTER TABLE reservas DROP COLUMN metodo_pago"))
 
+    if not await _columna_existe(sesion, "reservas", "vuelo_id"):
+        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN vuelo_id INT UNSIGNED NULL AFTER destino_id"))
+        await sesion.execute(
+            text(
+                "ALTER TABLE reservas ADD CONSTRAINT fk_reserva_vuelo "
+                "FOREIGN KEY (vuelo_id) REFERENCES vuelos(id) ON DELETE RESTRICT"
+            )
+        )
+
     await sesion.commit()
 
 
@@ -771,6 +1118,8 @@ def _opciones_carga_reserva():
         selectinload(Reserva.usuario).selectinload(User.role),
         selectinload(Reserva.usuario).selectinload(User.tipo_documento_catalogo),
         selectinload(Reserva.destino_rel).selectinload(Destino.pais),
+        selectinload(Reserva.vuelo_rel),
+        selectinload(Reserva.paquete_rel).selectinload(Paquete.excursiones),
         selectinload(Reserva.estado_rel),
         selectinload(Reserva.estado_pago_rel),
         selectinload(Reserva.metodo_pago_rel),
@@ -804,6 +1153,7 @@ app.add_middleware(
 )
 
 app.include_router(router_recomendaciones)
+app.include_router(router_comercial)
 
 
 def _respuesta_error(peticion: Request, estado: int, codigo: str, mensaje: str, detalles=None):
@@ -903,7 +1253,14 @@ async def recuperar_contrasena(payload: dict, sesion: SesionDep):
     usuario = await sesion.scalar(select(User).where(User.correo == correo).options(selectinload(User.role)))
     if usuario is None:
         return {"mensaje": "Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña."}
-    return {"mensaje": "Se generó un enlace de recuperación válido para tu cuenta.", "token": crear_token(usuario.id, usuario.role.nombre if usuario.role else "cliente", purpose="recuperacion")}
+    
+    # Generar token de recuperación
+    token_recuperacion = crear_token(usuario.id, usuario.role.nombre if usuario.role else "cliente", purpose="recuperacion", expiracion_minutos=60)
+    
+    # Enviar correo (async y no esperamos resultado)
+    await enviar_correo_recuperacion(usuario.correo, usuario.nombre, token_recuperacion)
+    
+    return {"mensaje": "Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña."}
 
 
 @app.post("/api/auth/restablecer")
@@ -956,6 +1313,7 @@ async def registrar_usuario(payload: UserCreate, sesion: SesionDep):
     )
     sesion.add(usuario)
     await sesion.commit()
+    await enviar_correo_bienvenida(usuario.correo, f"{usuario.nombre} {usuario.apellido}")
     return {"mensaje": "Cuenta creada correctamente."}
 
 
@@ -1135,14 +1493,291 @@ async def eliminar_servicio(servicio_id: int, admin: Administrador, sesion: Sesi
     return {"mensaje": "Servicio eliminado."}
 
 
+@app.get("/api/vuelos")
+async def listar_vuelos(usuario: UsuarioActual, sesion: SesionDep):
+    vuelos = await sesion.scalars(select(Vuelo).order_by(Vuelo.fecha_salida.asc()))
+    estado_cancelado_id = await _resolver_estado_reserva_id(sesion, "cancelada")
+    ocupacion = await sesion.execute(
+        select(Reserva.vuelo_id, func.coalesce(func.sum(Reserva.pasajeros), 0))
+        .where(Reserva.estado_id != estado_cancelado_id, Reserva.vuelo_id.is_not(None))
+        .group_by(Reserva.vuelo_id)
+    )
+    ocupados = {vuelo_id: int(total or 0) for vuelo_id, total in ocupacion.all()}
+    resultado = []
+    for vuelo in vuelos:
+        datos = _vuelo_a_dict(vuelo)
+        datos["pasajerosDisponibles"] = max(vuelo.capacidad_maxima - ocupados.get(vuelo.id, 0), 0)
+        resultado.append(datos)
+    return resultado
+
+
+@app.get("/api/vuelos/{vuelo_id}")
+async def obtener_vuelo(vuelo_id: int, usuario: UsuarioActual, sesion: SesionDep):
+    vuelo = await sesion.get(Vuelo, vuelo_id)
+    if vuelo is None:
+        raise RecursoNoEncontrado("un vuelo", vuelo_id)
+    return _vuelo_a_dict(vuelo)
+
+
+@app.post("/api/vuelos", status_code=status.HTTP_201_CREATED)
+async def crear_vuelo(payload: VueloCreate, admin: Administrador, sesion: SesionDep):
+    numero_vuelo = await _generar_numero_vuelo(sesion)
+    puerta, terminal = payload.puerta, payload.terminal
+    if not puerta or not terminal:
+        puerta, terminal = _puerta_terminal_por_ruta(payload.origen, payload.destino)
+    vuelo = Vuelo(
+        numero_vuelo=numero_vuelo,
+        aerolinea=payload.aerolinea,
+        avion=payload.avion,
+        origen=payload.origen,
+        destino=payload.destino,
+        fecha_salida=payload.fechaSalida,
+        fecha_llegada=payload.fechaLlegada,
+        capacidad_maxima=payload.capacidadMaxima,
+        puerta=puerta,
+        terminal=terminal,
+        estado=payload.estado,
+        activo=payload.activo,
+    )
+    sesion.add(vuelo)
+    await sesion.commit()
+    await sesion.refresh(vuelo)
+    return _vuelo_a_dict(vuelo)
+
+
+@app.put("/api/vuelos/{vuelo_id}")
+async def actualizar_vuelo(vuelo_id: int, payload: VueloCreate, admin: Administrador, sesion: SesionDep):
+    vuelo = await sesion.get(Vuelo, vuelo_id)
+    if vuelo is None:
+        raise RecursoNoEncontrado("un vuelo", vuelo_id)
+    duplicado = await sesion.scalar(
+        select(Vuelo).where(Vuelo.numero_vuelo == payload.numeroVuelo, Vuelo.id != vuelo_id)
+    )
+    if duplicado is not None:
+        raise ConflictoDeNegocio("Ya existe un vuelo con ese número.")
+    vuelo.numero_vuelo = payload.numeroVuelo
+    vuelo.aerolinea = payload.aerolinea
+    vuelo.avion = payload.avion
+    vuelo.origen = payload.origen
+    vuelo.destino = payload.destino
+    vuelo.fecha_salida = payload.fechaSalida
+    vuelo.fecha_llegada = payload.fechaLlegada
+    vuelo.capacidad_maxima = payload.capacidadMaxima
+    vuelo.puerta = payload.puerta
+    vuelo.terminal = payload.terminal
+    vuelo.estado = payload.estado
+    vuelo.activo = payload.activo
+    await sesion.commit()
+    await sesion.refresh(vuelo)
+    return _vuelo_a_dict(vuelo)
+
+
+@app.delete("/api/vuelos/{vuelo_id}")
+async def eliminar_vuelo(vuelo_id: int, admin: Administrador, sesion: SesionDep):
+    vuelo = await sesion.get(Vuelo, vuelo_id)
+    if vuelo is None:
+        raise RecursoNoEncontrado("un vuelo", vuelo_id)
+    await sesion.delete(vuelo)
+    await sesion.commit()
+    return {"mensaje": "Vuelo eliminado."}
+
+
+async def _validar_paquete(sesion: SesionDep, payload: PaqueteCreate):
+    destino = await sesion.get(Destino, payload.destinoId)
+    vuelo = await sesion.get(Vuelo, payload.vueloId)
+    hotel = await sesion.get(Hotel, payload.hotelId)
+    if destino is None:
+        raise RecursoNoEncontrado("un destino", payload.destinoId)
+    if vuelo is None:
+        raise RecursoNoEncontrado("un vuelo", payload.vueloId)
+    if hotel is None or not hotel.activo:
+        raise ErrorDeDominio("El hotel seleccionado no existe o está inactivo.")
+    ubicacion_destino = [_normalizar_texto(parte) for parte in destino.nombre.split(",")]
+    if _normalizar_texto(hotel.ciudad) not in ubicacion_destino or _normalizar_texto(hotel.pais) not in ubicacion_destino:
+        raise ErrorDeDominio("El hotel debe pertenecer a la ciudad y país del destino seleccionado.")
+    if not vuelo.activo or vuelo.estado in {"cancelado", "aterrizado"}:
+        raise ErrorDeDominio("El vuelo seleccionado no está disponible.")
+    if vuelo.fecha_salida.date() != payload.fechaSalida:
+        raise ErrorDeDominio("La fecha del paquete debe coincidir con la salida del vuelo.")
+    if _normalizar_texto(vuelo.destino) not in _normalizar_texto(destino.nombre) and _normalizar_texto(destino.nombre) not in _normalizar_texto(vuelo.destino):
+        raise ErrorDeDominio("El destino del paquete no coincide con el destino del vuelo.")
+    excursiones = list(await sesion.scalars(select(Excursion).where(Excursion.id.in_(set(payload.excursionIds))))) if payload.excursionIds else []
+    if len(excursiones) != len(set(payload.excursionIds)) or any(not excursion.activo for excursion in excursiones):
+        raise ErrorDeDominio("Una o más excursiones no existen o están inactivas.")
+    if any(_normalizar_texto(excursion.ciudad) not in ubicacion_destino or _normalizar_texto(excursion.pais) not in ubicacion_destino for excursion in excursiones):
+        raise ErrorDeDominio("Las excursiones deben pertenecer a la ciudad y país del destino seleccionado.")
+    return destino, vuelo, hotel, excursiones
+
+
+@app.get("/api/hoteles")
+async def listar_hoteles(usuario: UsuarioActual, sesion: SesionDep):
+    hoteles = await sesion.scalars(select(Hotel).order_by(Hotel.nombre.asc()))
+    return [_hotel_a_dict(hotel) for hotel in hoteles]
+
+
+@app.post("/api/hoteles", status_code=status.HTTP_201_CREATED)
+async def crear_hotel(payload: HotelCreate, admin: Administrador, sesion: SesionDep):
+    hotel = Hotel(nombre=payload.nombre.strip(), ciudad=payload.ciudad.strip(), pais=payload.pais.strip(), estrellas=payload.estrellas, precio_noche=payload.precioNoche, descripcion=payload.descripcion, activo=payload.activo)
+    sesion.add(hotel)
+    await sesion.commit()
+    await sesion.refresh(hotel)
+    return _hotel_a_dict(hotel)
+
+
+@app.put("/api/hoteles/{hotel_id}")
+async def actualizar_hotel(hotel_id: int, payload: HotelCreate, admin: Administrador, sesion: SesionDep):
+    hotel = await sesion.get(Hotel, hotel_id)
+    if hotel is None:
+        raise RecursoNoEncontrado("un hotel", hotel_id)
+    hotel.nombre, hotel.ciudad, hotel.pais, hotel.estrellas = payload.nombre.strip(), payload.ciudad.strip(), payload.pais.strip(), payload.estrellas
+    hotel.precio_noche, hotel.descripcion, hotel.activo = payload.precioNoche, payload.descripcion, payload.activo
+    await sesion.commit()
+    return _hotel_a_dict(hotel)
+
+
+@app.delete("/api/hoteles/{hotel_id}")
+async def eliminar_hotel(hotel_id: int, admin: Administrador, sesion: SesionDep):
+    hotel = await sesion.get(Hotel, hotel_id)
+    if hotel is None:
+        raise RecursoNoEncontrado("un hotel", hotel_id)
+    hotel.activo = False
+    await sesion.commit()
+    return {"mensaje": "Hotel desactivado."}
+
+
+@app.get("/api/excursiones")
+async def listar_excursiones(usuario: UsuarioActual, sesion: SesionDep):
+    excursiones = await sesion.scalars(select(Excursion).order_by(Excursion.nombre.asc()))
+    return [_excursion_a_dict(excursion) for excursion in excursiones]
+
+
+@app.post("/api/excursiones", status_code=status.HTTP_201_CREATED)
+async def crear_excursion(payload: ExcursionCreate, admin: Administrador, sesion: SesionDep):
+    excursion = Excursion(nombre=payload.nombre.strip(), ciudad=payload.ciudad.strip(), pais=payload.pais.strip(), duracion_horas=payload.duracionHoras, precio=payload.precio, descripcion=payload.descripcion, activo=payload.activo)
+    sesion.add(excursion)
+    await sesion.commit()
+    await sesion.refresh(excursion)
+    return _excursion_a_dict(excursion)
+
+
+@app.put("/api/excursiones/{excursion_id}")
+async def actualizar_excursion(excursion_id: int, payload: ExcursionCreate, admin: Administrador, sesion: SesionDep):
+    excursion = await sesion.get(Excursion, excursion_id)
+    if excursion is None:
+        raise RecursoNoEncontrado("una excursión", excursion_id)
+    excursion.nombre, excursion.ciudad, excursion.pais, excursion.duracion_horas = payload.nombre.strip(), payload.ciudad.strip(), payload.pais.strip(), payload.duracionHoras
+    excursion.precio, excursion.descripcion, excursion.activo = payload.precio, payload.descripcion, payload.activo
+    await sesion.commit()
+    return _excursion_a_dict(excursion)
+
+
+@app.delete("/api/excursiones/{excursion_id}")
+async def eliminar_excursion(excursion_id: int, admin: Administrador, sesion: SesionDep):
+    excursion = await sesion.get(Excursion, excursion_id)
+    if excursion is None:
+        raise RecursoNoEncontrado("una excursión", excursion_id)
+    excursion.activo = False
+    await sesion.commit()
+    return {"mensaje": "Excursión desactivada."}
+
+
+@app.get("/api/paquetes")
+async def listar_paquetes(usuario: UsuarioActual, sesion: SesionDep):
+    paquetes = await sesion.scalars(select(Paquete).where(Paquete.activo.is_(True)).order_by(Paquete.fecha_salida.asc()))
+    estado_cancelado_id = await _resolver_estado_reserva_id(sesion, "cancelada")
+    ocupacion = await sesion.execute(
+        select(Reserva.vuelo_id, func.coalesce(func.sum(Reserva.pasajeros), 0))
+        .where(Reserva.estado_id != estado_cancelado_id, Reserva.vuelo_id.is_not(None))
+        .group_by(Reserva.vuelo_id)
+    )
+    ocupados = {vuelo_id: int(total or 0) for vuelo_id, total in ocupacion.all()}
+    resultado = []
+    for paquete in paquetes:
+        datos = _paquete_a_dict(paquete)
+        datos["vuelo"]["pasajerosDisponibles"] = max(paquete.vuelo_rel.capacidad_maxima - ocupados.get(paquete.vuelo_id, 0), 0)
+        resultado.append(datos)
+    return resultado
+
+
+@app.post("/api/paquetes", status_code=status.HTTP_201_CREATED)
+async def crear_paquete(payload: PaqueteCreate, admin: Administrador, sesion: SesionDep):
+    if payload.vuelo is not None:
+        numero_vuelo = await _generar_numero_vuelo(sesion)
+        puerta, terminal = payload.vuelo.puerta, payload.vuelo.terminal
+        if not puerta or not terminal:
+            puerta, terminal = _puerta_terminal_por_ruta(payload.vuelo.origen, payload.vuelo.destino)
+        vuelo_nuevo = Vuelo(
+            numero_vuelo=numero_vuelo,
+            aerolinea=payload.vuelo.aerolinea,
+            avion=payload.vuelo.avion,
+            origen=payload.vuelo.origen,
+            destino=payload.vuelo.destino,
+            fecha_salida=payload.vuelo.fechaSalida,
+            fecha_llegada=payload.vuelo.fechaLlegada,
+            capacidad_maxima=payload.vuelo.capacidadMaxima,
+            puerta=puerta,
+            terminal=terminal,
+            estado=payload.vuelo.estado,
+            activo=payload.vuelo.activo,
+        )
+        sesion.add(vuelo_nuevo)
+        await sesion.flush()
+        payload.vueloId = vuelo_nuevo.id
+    destino, vuelo, hotel, excursiones = await _validar_paquete(sesion, payload)
+    paquete = Paquete(nombre=payload.nombre.strip(), destino_id=destino.id, vuelo_id=vuelo.id, hotel_id=hotel.id, fecha_salida=payload.fechaSalida, fecha_regreso=payload.fechaRegreso, precio_base=payload.precioBase, activo=payload.activo, excursiones=excursiones)
+    sesion.add(paquete)
+    await sesion.commit()
+    await sesion.refresh(paquete)
+    return _paquete_a_dict(paquete)
+
+
+@app.put("/api/paquetes/{paquete_id}")
+async def actualizar_paquete(paquete_id: int, payload: PaqueteCreate, admin: Administrador, sesion: SesionDep):
+    paquete = await sesion.get(Paquete, paquete_id, options=[selectinload(Paquete.excursiones)])
+    if paquete is None:
+        raise RecursoNoEncontrado("un paquete", paquete_id)
+    destino, vuelo, hotel, excursiones = await _validar_paquete(sesion, payload)
+    paquete.nombre, paquete.destino_id, paquete.vuelo_id, paquete.hotel_id = payload.nombre.strip(), destino.id, vuelo.id, hotel.id
+    paquete.fecha_salida, paquete.fecha_regreso, paquete.precio_base, paquete.activo = payload.fechaSalida, payload.fechaRegreso, payload.precioBase, payload.activo
+    paquete.excursiones = excursiones
+    await sesion.commit()
+    await sesion.refresh(paquete)
+    return _paquete_a_dict(paquete)
+
+
+@app.delete("/api/paquetes/{paquete_id}")
+async def eliminar_paquete(paquete_id: int, admin: Administrador, sesion: SesionDep):
+    paquete = await sesion.get(Paquete, paquete_id)
+    if paquete is None:
+        raise RecursoNoEncontrado("un paquete", paquete_id)
+    paquete.activo = False
+    await sesion.commit()
+    return {"mensaje": "Paquete desactivado."}
+
+
 @app.post("/api/reservas", status_code=status.HTTP_201_CREATED)
 async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: SesionDep):
     if payload.fechaRegreso < payload.fechaSalida:
         raise ErrorDeDominio("La fecha de regreso debe ser posterior a la fecha de salida.")
-    destino = await _resolver_destino(sesion, payload.destino, payload.destinoId)
+    paquete = None
+    if payload.paqueteId is not None:
+        paquete = await sesion.get(Paquete, payload.paqueteId, options=[selectinload(Paquete.destino_rel), selectinload(Paquete.vuelo_rel)])
+        if paquete is None or not paquete.activo:
+            raise ErrorDeDominio("El paquete seleccionado no está disponible.")
+        if payload.fechaSalida != paquete.fecha_salida or payload.origen.strip().lower() != paquete.vuelo_rel.origen.strip().lower():
+            raise ErrorDeDominio("Los datos de la reserva no coinciden con el paquete seleccionado.")
+        destino = paquete.destino_rel
+        vuelo = await _resolver_vuelo_reserva(sesion, payload, destino)
+        if vuelo.id != paquete.vuelo_id:
+            raise ErrorDeDominio("El vuelo del paquete ya no está disponible.")
+    else:
+        destino = await _resolver_destino(sesion, payload.destino, payload.destinoId)
+        vuelo = await _resolver_vuelo_reserva(sesion, payload, destino)
     reserva = Reserva(
         usuario_id=usuario.id,
         destino_id=destino.id,
+        vuelo_id=vuelo.id,
+        paquete_id=paquete.id if paquete else None,
         fecha_salida=payload.fechaSalida,
         fecha_regreso=payload.fechaRegreso,
         pasajeros=payload.pasajeros,
@@ -1150,11 +1785,57 @@ async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: 
         notas=payload.notas,
         estado_id=await _resolver_estado_reserva_id(sesion, "pendiente"),
         estado_pago_id=await _resolver_estado_pago_id(sesion, "pendiente"),
-        monto_total=_calcular_monto_reserva(destino, payload.fechaSalida, payload.fechaRegreso, payload.pasajeros),
+        monto_total=(paquete.precio_base * payload.pasajeros if paquete else _calcular_monto_reserva(destino, payload.fechaSalida, payload.fechaRegreso, payload.pasajeros)),
     )
     sesion.add(reserva)
     await sesion.commit()
-    return {"id": reserva.id, "mensaje": "Solicitud registrada."}
+    monto_reserva = Decimal(str(reserva.monto_total or 0))
+    precio_pasajero = (monto_reserva / payload.pasajeros).quantize(Decimal("0.01"))
+    venta = Venta(
+        cliente_id=usuario.id,
+        usuario_id=usuario.id,
+        subtotal=monto_reserva,
+        descuento=Decimal("0"),
+        impuestos=Decimal("0"),
+        total=monto_reserva,
+        estado="pendiente",
+        detalles=[DetalleVenta(
+            nombre=f"Reserva de viaje - {destino.nombre}",
+            cantidad=payload.pasajeros,
+            precio_unitario=precio_pasajero,
+            subtotal=monto_reserva,
+        )],
+    )
+    sesion.add(venta)
+    await sesion.flush()
+    sesion.add(Factura(
+        venta_id=venta.id,
+        numero=f"AUR-{datetime.now(timezone.utc):%Y%m%d}-{venta.id:06d}",
+        estado="emitida",
+        detalles=[DetalleFactura(
+            nombre=f"Reserva de viaje - {destino.nombre}",
+            cantidad=payload.pasajeros,
+            precio_unitario=precio_pasajero,
+            subtotal=monto_reserva,
+        )],
+    ))
+    await sesion.commit()
+    reserva_dict = {
+        "destino": destino.nombre,
+        "fechaSalida": payload.fechaSalida.isoformat(),
+        "fechaRegreso": payload.fechaRegreso.isoformat(),
+        "pasajeros": payload.pasajeros,
+        "montoTotal": float(reserva.monto_total or 0),
+        "estado": "pendiente",
+    }
+    correo_enviado = await enviar_correo_reserva(
+        usuario.correo,
+        f"{usuario.nombre} {usuario.apellido}",
+        reserva_dict,
+    )
+    if not correo_enviado:
+        logger.warning("Reserva %s creada, pero no se pudo enviar el correo a %s.", reserva.id, usuario.correo)
+    return {"id": reserva.id, "mensaje": "Solicitud registrada. Recibirás la confirmación en tu correo."}
 
 
 @app.get("/api/reservas")
@@ -1182,14 +1863,28 @@ async def obtener_reserva(reserva: ReservaDeRuta, usuario: UsuarioActual):
 async def actualizar_reserva(reserva: ReservaDeRuta, payload: ReservaUpdate, personal: EmpleadoOAdmin, sesion: SesionDep):
     if payload.fechaRegreso < payload.fechaSalida:
         raise ErrorDeDominio("La fecha de regreso debe ser posterior a la fecha de salida.")
-    destino = await _resolver_destino(sesion, payload.destino, payload.destinoId)
+    paquete = None
+    if payload.paqueteId is not None:
+        paquete = await sesion.get(Paquete, payload.paqueteId, options=[selectinload(Paquete.destino_rel)])
+        if paquete is None or not paquete.activo:
+            raise ErrorDeDominio("El paquete seleccionado no está disponible.")
+        destino = paquete.destino_rel
+        payload.fechaSalida = paquete.fecha_salida
+        payload.fechaRegreso = paquete.fecha_regreso
+        payload.origen = paquete.vuelo_rel.origen
+        vuelo = await _resolver_vuelo_reserva(sesion, payload, destino, reserva.id)
+        reserva.paquete_id = paquete.id
+    else:
+        destino = await _resolver_destino(sesion, payload.destino, payload.destinoId)
+        vuelo = await _resolver_vuelo_reserva(sesion, payload, destino, reserva.id)
     reserva.destino_id = destino.id
+    reserva.vuelo_id = vuelo.id
     reserva.fecha_salida = payload.fechaSalida
     reserva.fecha_regreso = payload.fechaRegreso
     reserva.pasajeros = payload.pasajeros
     reserva.telefono_contacto = payload.telefonoContacto
     reserva.notas = payload.notas
-    reserva.monto_total = _calcular_monto_reserva(destino, payload.fechaSalida, payload.fechaRegreso, payload.pasajeros)
+    reserva.monto_total = paquete.precio_base * payload.pasajeros if paquete else _calcular_monto_reserva(destino, payload.fechaSalida, payload.fechaRegreso, payload.pasajeros)
     await sesion.commit()
     return {"mensaje": "Solicitud actualizada correctamente."}
 

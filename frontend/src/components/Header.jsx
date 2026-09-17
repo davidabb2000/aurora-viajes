@@ -74,7 +74,7 @@ function Header() {
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primario text-xs font-bold text-white">
                   {sesion.usuario.nombre?.trim()?.charAt(0)?.toUpperCase() || "U"}
                 </span>
-                <span className="max-w-[14rem] truncate">{sesion.usuario.nombre}</span>
+                <span className="max-w-56 truncate">{sesion.usuario.nombre}</span>
                 <span aria-hidden="true" className="text-xs text-texto-suave">
                   ▾
                 </span>

@@ -1,4 +1,5 @@
 import Carousel from "../components/Carousel";
+import Sponsors from "../components/Sponsors";
 import destinos from "../data/destinos";
 
 function Index() {
@@ -21,6 +22,8 @@ function Index() {
 
         <Carousel items={destinos} />
       </div>
+
+      <Sponsors />
     </div>
   );
 }

@@ -1,6 +1,7 @@
-import { Route, Routes } from "react-router-dom";
-import Header from "./components/Header";
-import Footer from "./components/Footer";
+import { Route, Routes, useLocation } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
+import ClientLayout from "./layouts/ClientLayout";
+import AdminLayout from "./layouts/AdminLayout";
 import Index from "./pages/Index";
 import QuienesSomos from "./pages/QuienesSomos";
 import Contacto from "./pages/Contacto";
@@ -10,12 +11,30 @@ import PagoReserva from "./pages/PagoReserva";
 import Reservas from "./pages/Reservas";
 import PagoExitoso from "./pages/PagoExitoso";
 import Recomendaciones from "./pages/Recomendaciones";
-import WhatsAppButton from "./components/WhatsAppButton";
+import AvanceCinco from "./pages/AvanceCinco";
 
 function App() {
+  const { sesion } = useAuth();
+  const location = useLocation();
+
+  // Determinar si estamos en panel
+  const esPanel = location.pathname.startsWith("/panel");
+
+  // El panel usa el mismo layout para todos los roles autenticados
+  if (esPanel && sesion) {
+    return (
+      <AdminLayout>
+        <Routes>
+          <Route path="/panel" element={<Panel />} />
+          <Route path="/panel/avance-cinco" element={<AvanceCinco />} />
+        </Routes>
+      </AdminLayout>
+    );
+  }
+
+  // Resto de rutas usan ClientLayout
   return (
-    <>
-      <Header />
+    <ClientLayout>
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/quienes-somos" element={<QuienesSomos />} />
@@ -26,10 +45,9 @@ function App() {
         <Route path="/reservas/pago/:id" element={<PagoReserva />} />
         <Route path="/reservas/pago-exitoso" element={<PagoExitoso />} />
         <Route path="/panel" element={<Panel />} />
+        <Route path="/panel/avance-cinco" element={<AvanceCinco />} />
       </Routes>
-      <Footer />
-      <WhatsAppButton />
-    </>
+    </ClientLayout>
   );
 }
 

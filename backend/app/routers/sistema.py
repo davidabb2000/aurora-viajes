@@ -5,8 +5,8 @@ from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 
-from app.dependencias import Bibliotecario, SesionDep
-from app.models.biblioteca import Libro
+from app.dependencias import SesionDep
+from app.models.biblioteca import Destino
 from app.schemas.diagnostico import Diagnostico, EstadoComponente
 
 router = APIRouter(prefix='/sistema', tags=['Sistema'])
@@ -34,7 +34,7 @@ async def _medir(nombre: str, corrutina) -> EstadoComponente:
 
 
 async def _comprobar_base(sesion) -> str:
-    total = await sesion.scalar(select(Libro.id).limit(1))
+    total = await sesion.scalar(select(Destino.id).limit(1))
     return f'Consulta ejecutada (hay datos: {total is not None}).'
 
 
@@ -42,11 +42,11 @@ async def _comprobar_modelo(servicio) -> str:
     if servicio is None:
         raise RuntimeError('El modelo no está cargado.')
     variables = {
-        'dias_prestamo': 15,
-        'prestamos_previos': 5,
-        'retrasos_previos': 1,
-        'ejemplares_disponibles': 3,
-        'categoria': 'novela',
+        'dias_viaje': 7,
+        'viajes_previos': 2,
+        'cancelaciones_previas': 0,
+        'pasajeros': 2,
+        'tipo_destino': 'playa',
     }
     probabilidad = await run_in_threadpool(servicio.predecir, variables)
     return f'Predicción de prueba: {probabilidad:.3f} ({servicio.version}).'
@@ -56,8 +56,8 @@ async def _comprobar_proveedor(servicio) -> str:
     if servicio is None or not servicio.configurado:
         raise RuntimeError('Sin clave de API configurada.')
     await servicio.recomendar(
-        'prueba de diagnóstico',
-        [{'libro_id': 1, 'titulo': 'Prueba', 'autor': '—', 'categoria': 'novela'}],
+        'me gustaría un viaje a una playa paradisíaca',
+        [{'destino_id': 1, 'nombre': 'Prueba', 'pais': 'Desconocido', 'descripcion': 'Destino de prueba'}],
     )
     return 'El proveedor respondió correctamente.'
 
@@ -67,7 +67,7 @@ async def _comprobar_proveedor(servicio) -> str:
     response_model=Diagnostico,
     summary='Estado de la base de datos y de las integraciones de IA',
 )
-async def diagnostico(peticion: Request, sesion: SesionDep, bibliotecario: Bibliotecario):
+async def diagnostico(peticion: Request, sesion: SesionDep):
     estado = peticion.app.state
 
     componentes = await asyncio.gather(

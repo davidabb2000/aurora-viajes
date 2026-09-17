@@ -1,4 +1,2 @@
-Sidebar en panel administrador
-Solo header en las paginas de clientes, no en el panel
-Recuperacion de contrasena con correo
-Mapa de google
+subir en github, y a la nube (vercel)
+separar el login

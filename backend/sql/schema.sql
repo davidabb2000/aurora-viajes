@@ -3,7 +3,19 @@ USE aurora_viajes;
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS reservas;
+DROP TABLE IF EXISTS paquete_excursiones;
+DROP TABLE IF EXISTS paquetes;
+DROP TABLE IF EXISTS excursiones;
+DROP TABLE IF EXISTS hoteles;
+DROP TABLE IF EXISTS vuelos;
 DROP TABLE IF EXISTS mensajes_contacto;
+DROP TABLE IF EXISTS detalle_ventas;
+DROP TABLE IF EXISTS detalle_facturas;
+DROP TABLE IF EXISTS mensajes;
+DROP TABLE IF EXISTS conversaciones;
+DROP TABLE IF EXISTS facturas;
+DROP TABLE IF EXISTS ventas;
+DROP TABLE IF EXISTS pqr;
 DROP TABLE IF EXISTS usuarios;
 DROP TABLE IF EXISTS productos;
 DROP TABLE IF EXISTS servicios;
@@ -95,7 +107,7 @@ CREATE TABLE usuarios (
 );
 
 CREATE TABLE productos (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL,
   descripcion TEXT,
   precio DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -103,17 +115,88 @@ CREATE TABLE productos (
 );
 
 CREATE TABLE servicios (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL,
   descripcion TEXT,
   precio DECIMAL(12,2) NOT NULL DEFAULT 0,
   activo BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+CREATE TABLE vuelos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  numero_vuelo VARCHAR(20) NOT NULL UNIQUE,
+  aerolinea VARCHAR(80) NOT NULL,
+  avion VARCHAR(80) NOT NULL,
+  origen VARCHAR(120) NOT NULL,
+  destino VARCHAR(120) NOT NULL,
+  fecha_salida DATETIME NOT NULL,
+  fecha_llegada DATETIME NOT NULL,
+  capacidad_maxima SMALLINT UNSIGNED NOT NULL,
+  puerta VARCHAR(10),
+  terminal VARCHAR(20),
+  estado VARCHAR(20) NOT NULL DEFAULT 'programado',
+  activo BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT chk_vuelo_horario CHECK (fecha_llegada > fecha_salida),
+  CONSTRAINT chk_vuelo_capacidad CHECK (capacidad_maxima BETWEEN 1 AND 1000)
+);
+
+CREATE TABLE hoteles (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(120) NOT NULL,
+  ciudad VARCHAR(120) NOT NULL,
+  pais VARCHAR(120) NOT NULL,
+  estrellas TINYINT UNSIGNED NOT NULL,
+  precio_noche DECIMAL(12,2) NOT NULL DEFAULT 0,
+  descripcion TEXT,
+  activo BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT chk_hotel_estrellas CHECK (estrellas BETWEEN 1 AND 5),
+  CONSTRAINT chk_hotel_precio CHECK (precio_noche >= 0)
+);
+
+CREATE TABLE excursiones (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(120) NOT NULL,
+  ciudad VARCHAR(120) NOT NULL,
+  pais VARCHAR(120) NOT NULL,
+  duracion_horas SMALLINT UNSIGNED NOT NULL,
+  precio DECIMAL(12,2) NOT NULL DEFAULT 0,
+  descripcion TEXT,
+  activo BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT chk_excursion_duracion CHECK (duracion_horas BETWEEN 1 AND 48),
+  CONSTRAINT chk_excursion_precio CHECK (precio >= 0)
+);
+
+CREATE TABLE paquetes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(140) NOT NULL,
+  destino_id INT UNSIGNED NOT NULL,
+  vuelo_id INT NOT NULL,
+  hotel_id INT NOT NULL,
+  fecha_salida DATE NOT NULL,
+  fecha_regreso DATE NOT NULL,
+  precio_base DECIMAL(12,2) NOT NULL DEFAULT 0,
+  activo BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT fk_paquete_destino FOREIGN KEY (destino_id) REFERENCES destinos(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_paquete_vuelo FOREIGN KEY (vuelo_id) REFERENCES vuelos(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_paquete_hotel FOREIGN KEY (hotel_id) REFERENCES hoteles(id) ON DELETE RESTRICT,
+  CONSTRAINT chk_paquete_fechas CHECK (fecha_regreso >= fecha_salida),
+  CONSTRAINT chk_paquete_precio CHECK (precio_base >= 0)
+);
+
+CREATE TABLE paquete_excursiones (
+  paquete_id INT NOT NULL,
+  excursion_id INT NOT NULL,
+  PRIMARY KEY (paquete_id, excursion_id),
+  CONSTRAINT fk_paquete_excursion_paquete FOREIGN KEY (paquete_id) REFERENCES paquetes(id) ON DELETE CASCADE,
+  CONSTRAINT fk_paquete_excursion_excursion FOREIGN KEY (excursion_id) REFERENCES excursiones(id) ON DELETE RESTRICT
+);
+
 CREATE TABLE reservas (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   usuario_id INT UNSIGNED NOT NULL,
   destino_id INT UNSIGNED NOT NULL,
+  vuelo_id INT NULL,
+  paquete_id INT NULL,
   fecha_salida DATE NOT NULL,
   fecha_regreso DATE NOT NULL,
   pasajeros TINYINT UNSIGNED NOT NULL DEFAULT 1,
@@ -128,6 +211,8 @@ CREATE TABLE reservas (
   actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_reserva_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
   CONSTRAINT fk_reserva_destino FOREIGN KEY (destino_id) REFERENCES destinos(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_reserva_vuelo FOREIGN KEY (vuelo_id) REFERENCES vuelos(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_reserva_paquete FOREIGN KEY (paquete_id) REFERENCES paquetes(id) ON DELETE RESTRICT,
   CONSTRAINT fk_reserva_estado FOREIGN KEY (estado_id) REFERENCES estados_reserva(id) ON DELETE RESTRICT,
   CONSTRAINT fk_reserva_estado_pago FOREIGN KEY (estado_pago_id) REFERENCES estados_pago(id) ON DELETE RESTRICT,
   CONSTRAINT fk_reserva_metodo_pago FOREIGN KEY (metodo_pago_id) REFERENCES metodos_pago(id) ON DELETE SET NULL
@@ -139,6 +224,83 @@ CREATE TABLE mensajes_contacto (
   correo VARCHAR(100) NOT NULL,
   mensaje TEXT NOT NULL,
   creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE ventas (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  cliente_id INT UNSIGNED NOT NULL,
+  usuario_id INT UNSIGNED NULL,
+  subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
+  descuento DECIMAL(12,2) NOT NULL DEFAULT 0,
+  impuestos DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  estado VARCHAR(30) NOT NULL DEFAULT 'completada',
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_venta_cliente FOREIGN KEY (cliente_id) REFERENCES usuarios(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_venta_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+CREATE TABLE detalle_ventas (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  venta_id INT UNSIGNED NOT NULL,
+  producto_id INT NULL,
+  servicio_id INT NULL,
+  nombre VARCHAR(140) NOT NULL,
+  cantidad INT UNSIGNED NOT NULL,
+  precio_unitario DECIMAL(12,2) NOT NULL,
+  subtotal DECIMAL(12,2) NOT NULL,
+  CONSTRAINT fk_detalle_venta FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
+  CONSTRAINT fk_detalle_producto FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_detalle_servicio FOREIGN KEY (servicio_id) REFERENCES servicios(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE facturas (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  venta_id INT UNSIGNED NOT NULL UNIQUE,
+  numero VARCHAR(40) NOT NULL UNIQUE,
+  estado VARCHAR(30) NOT NULL DEFAULT 'emitida',
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_factura_venta FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE
+);
+
+CREATE TABLE detalle_facturas (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  factura_id INT UNSIGNED NOT NULL,
+  nombre VARCHAR(140) NOT NULL,
+  cantidad INT UNSIGNED NOT NULL,
+  precio_unitario DECIMAL(12,2) NOT NULL,
+  subtotal DECIMAL(12,2) NOT NULL,
+  CONSTRAINT fk_detalle_factura FOREIGN KEY (factura_id) REFERENCES facturas(id) ON DELETE CASCADE
+);
+
+CREATE TABLE pqr (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  cliente_id INT UNSIGNED NOT NULL,
+  tipo VARCHAR(30) NOT NULL,
+  asunto VARCHAR(140) NOT NULL,
+  descripcion TEXT NOT NULL,
+  respuesta TEXT,
+  estado VARCHAR(30) NOT NULL DEFAULT 'pendiente',
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_pqr_cliente FOREIGN KEY (cliente_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+CREATE TABLE conversaciones (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  cliente_id INT UNSIGNED NULL,
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_conversacion_cliente FOREIGN KEY (cliente_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+CREATE TABLE mensajes (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  conversacion_id INT UNSIGNED NOT NULL,
+  rol VARCHAR(20) NOT NULL,
+  contenido TEXT NOT NULL,
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_mensaje_conversacion FOREIGN KEY (conversacion_id) REFERENCES conversaciones(id) ON DELETE CASCADE
 );
 
 INSERT INTO tipos_documento (codigo, nombre) VALUES

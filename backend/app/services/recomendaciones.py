@@ -127,6 +127,58 @@ class ServicioDeRecomendaciones:
 
         raise ProveedorNoDisponible("El proveedor no respondió.")
 
+    async def conversar(self, mensaje: str, historial: list[dict[str, str]] | None = None) -> str:
+        """Genera una respuesta conversacional usando la misma integración Groq."""
+        if not self.configurado:
+            raise ProveedorNoDisponible("No hay clave de Groq configurada.")
+
+        cuerpo = {
+            "model": configuracion.proveedor_ia_modelo,
+            "max_tokens": 600,
+            "temperature": 0.3,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Eres Aurora, el asistente de Aurora Viajes. Responde en español, "
+                        "orienta sobre destinos, reservas, viajes y PQR. No inventes precios, "
+                        "disponibilidad ni estados de reservas. Sé claro y breve."
+                    ),
+                },
+                *(historial or [])[-20:],
+                {"role": "user", "content": mensaje},
+            ],
+        }
+        cabeceras = {
+            "authorization": f"Bearer {self._clave}",
+            "content-type": "application/json",
+        }
+
+        for intento in range(configuracion.proveedor_ia_reintentos + 1):
+            ultimo_intento = intento == configuracion.proveedor_ia_reintentos
+            try:
+                respuesta = await self._cliente.post(
+                    configuracion.proveedor_ia_url,
+                    json=cuerpo,
+                    headers=cabeceras,
+                    timeout=configuracion.proveedor_ia_timeout,
+                )
+                if 400 <= respuesta.status_code < 500 and respuesta.status_code != 429:
+                    raise _RechazoDefinitivo(f"El proveedor respondió {respuesta.status_code}.")
+                respuesta.raise_for_status()
+                texto = respuesta.json()["choices"][0]["message"]["content"]
+                if not isinstance(texto, str) or not texto.strip():
+                    raise ProveedorNoDisponible("El proveedor devolvió una respuesta vacía.")
+                return texto.strip()
+            except _RechazoDefinitivo:
+                raise
+            except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError, KeyError, IndexError, TypeError, ProveedorNoDisponible) as exc:
+                if ultimo_intento:
+                    raise ProveedorNoDisponible("El proveedor no respondió tras varios intentos.") from exc
+                await asyncio.sleep(2**intento)
+
+        raise ProveedorNoDisponible("El proveedor no respondió.")
+
     @staticmethod
     def _extraer_recomendaciones(carga: dict) -> list[dict]:
         try:

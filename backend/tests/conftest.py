@@ -11,9 +11,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.base_datos import Base, obtener_sesion
 from app.core.seguridad import hashear_contrasena
-from app.dependencias import obtener_servicio_riesgo
 from app.main import app
-from app.models.biblioteca import Autor, Categoria, Libro, Socio
+from app.models.biblioteca import Destino, Pais, TipoDocumento, User, Role, Permiso
 from app.services.recomendaciones import ServicioDeRecomendaciones
 
 

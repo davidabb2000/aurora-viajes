@@ -38,6 +38,14 @@ class Configuracion(BaseSettings):
 
     admin_email: str = "admin@auroraviajes.com"
     admin_password: str = "Admin123!"
+    
+    # Configuración de correos
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str = "noreply@auroraviajes.com"
+    smtp_use_tls: bool = True
 
     @field_validator("proveedor_ia_api_key", mode="before")
     @classmethod
