@@ -106,6 +106,10 @@ Para IA y despliegue, configura las variables `PROVEEDOR_IA_API_KEY`, `PROVEEDOR
 
 El backend y el frontend incluyen un `Dockerfile` independiente para desplegarlos como servicios separados en Railway. En el servicio backend configura `MOTOR_BD=mysql`, las variables `MYSQL_*`, `SECRET_KEY`, `ORIGENES_PERMITIDOS` y `PROVEEDOR_IA_*`. En el servicio frontend configura `VITE_API_URL` con la URL pública del backend más `/api` y reconstruye la imagen. Configura CORS en el backend con la URL pública del frontend.
 
+Para Railway crea dos servicios desde este repositorio y define la carpeta raíz de cada uno: `backend` para la API y `frontend` para la aplicación web. Railway detectará el `Dockerfile` de cada carpeta. El backend escucha el puerto que Railway entrega mediante `PORT` y expone `/api/health`. El frontend debe construirse con `VITE_API_URL=https://tu-backend.up.railway.app/api`.
+
+Variables mínimas del backend: `SECRET_KEY` (una clave larga y aleatoria), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ORIGENES_PERMITIDOS=["https://tu-frontend.up.railway.app"]`, `MOTOR_BD=mysql` y las variables `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`. También puedes usar `DATABASE_URL` con una URL MySQL completa; esta variable tiene prioridad sobre `MYSQL_*`. Si usas IA, pagos o correo, agrega `PROVEEDOR_IA_*`, `STRIPE_SECRET_KEY` y `SMTP_*` según corresponda.
+
 La URL pública y las evidencias de producción deben agregarse después de crear ambos servicios en Railway. La colección Postman incluida permite generar las evidencias de endpoints antes y después del despliegue.
 
 En el flujo comercial de Aurora Viajes, la venta corresponde a una reserva de viaje: cada reserva nueva crea automáticamente una venta, un detalle con el destino y los pasajeros, y una factura. Los campos de producto y servicio se conservan en el modelo para compatibilidad con el requerimiento general, pero no son necesarios para operar este proyecto.

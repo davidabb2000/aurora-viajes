@@ -22,6 +22,7 @@ class Configuracion(BaseSettings):
     mysql_database: str = "aurora_viajes"
     mysql_charset: str = "utf8mb4"
     mysql_driver: str = "aiomysql"
+    database_url: str | None = None
     url_base_datos: str = ""
 
     secret_key: str
@@ -67,7 +68,14 @@ class Configuracion(BaseSettings):
 
     @model_validator(mode="after")
     def construir_url_base_datos(self):
-        if self.motor_bd.lower() == "mysql":
+        if self.database_url:
+            url = self.database_url.strip()
+            if url.startswith("mysql://"):
+                url = f"mysql+{self.mysql_driver}://{url[len('mysql://'):]}"
+            elif url.startswith("mysql+pymysql://"):
+                url = f"mysql+{self.mysql_driver}://{url[len('mysql+pymysql://'):]}"
+            self.url_base_datos = url
+        elif self.motor_bd.lower() == "mysql":
             credenciales = self.mysql_user
             if self.mysql_password:
                 credenciales = f"{self.mysql_user}:{self.mysql_password}"
