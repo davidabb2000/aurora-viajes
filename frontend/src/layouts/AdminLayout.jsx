@@ -1,5 +1,4 @@
 import Sidebar from "../components/Sidebar";
-import Footer from "../components/Footer";
 
 function AdminLayout({ children }) {
   return (
@@ -9,7 +8,6 @@ function AdminLayout({ children }) {
         <main className="min-h-screen">
           {children}
         </main>
-        <Footer />
       </div>
     </div>
   );

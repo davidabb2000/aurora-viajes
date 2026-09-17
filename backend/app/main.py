@@ -3,7 +3,7 @@ import re
 import secrets
 import unicodedata
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -89,6 +89,19 @@ PAISES_Y_DESTINOS_SEMILLA = [
 VUELOS_SEMILLA = [
     ("AV101", "Aurora Airlines", "Airbus A320", "Bogotá", "París", datetime(2026, 10, 5, 8, 30), datetime(2026, 10, 5, 23, 15), 180, "A12", "1"),
     ("AV202", "Aurora Airlines", "Boeing 787", "Bogotá", "Tokio", datetime(2026, 10, 12, 10, 0), datetime(2026, 10, 13, 8, 30), 260, "B04", "2"),
+]
+
+PAQUETES_PUBLICADOS_SEMILLA = [
+    ("París, Francia", "AUR301", "Bogotá", "París", "Hotel Lumière Aurora", "París", "Francia", 5, 480000, ("Crucero nocturno por el Sena", 3, 180000), ("Ruta de arte en Montmartre", 4, 145000), ("Versalles y sus jardines", 6, 220000)),
+    ("Kioto, Japón", "AUR302", "Bogotá", "Kioto", "Ryokan Sakura Aurora", "Kioto", "Japón", 4, 390000, ("Ceremonia del té tradicional", 3, 165000), ("Bosque de bambú de Arashiyama", 5, 210000), ("Nara y sus templos", 8, 260000)),
+    ("Bali, Indonesia", "AUR303", "Bogotá", "Bali", "Ubud Rice Terrace Resort", "Bali", "Indonesia", 5, 310000, ("Amanecer en el monte Batur", 7, 240000), ("Templos y arrozales de Ubud", 6, 190000), ("Snorkel en Nusa Penida", 8, 280000)),
+    ("Cartagena, Colombia", "AUR304", "Bogotá", "Cartagena", "Casa del Mar Boutique", "Cartagena", "Colombia", 4, 280000, ("Recorrido por la ciudad amurallada", 3, 85000), ("Atardecer en la bahía", 2, 110000), ("Islas del Rosario", 8, 230000)),
+    ("Santorini, Grecia", "AUR305", "Bogotá", "Santorini", "Aegean White Suites", "Santorini", "Grecia", 5, 520000, ("Caldera y pueblos blancos", 5, 220000), ("Cata de vinos volcánicos", 4, 195000), ("Paseo en catamarán", 7, 290000)),
+    ("Cusco, Perú", "AUR306", "Bogotá", "Cusco", "Andenes del Sol Hotel", "Cusco", "Perú", 4, 250000, ("Machu Picchu en tren", 10, 420000), ("Valle Sagrado de los Incas", 8, 260000), ("Montaña de siete colores", 12, 230000)),
+    ("Marrakech, Marruecos", "AUR307", "Bogotá", "Marrakech", "Riad Medina Aurora", "Marrakech", "Marruecos", 4, 300000, ("Sabores de la medina", 4, 150000), ("Palacio de la Bahía y zocos", 5, 130000), ("Desierto de Agafay", 8, 250000)),
+    ("Reikiavik, Islandia", "AUR308", "Bogotá", "Reikiavik", "Northern Lights Lodge", "Reikiavik", "Islandia", 4, 430000, ("Cacería de auroras boreales", 5, 260000), ("Círculo dorado", 8, 290000), ("Laguna Azul y costa volcánica", 7, 310000)),
+    ("Nueva York, EE. UU.", "AUR309", "Bogotá", "Nueva York", "Manhattan Skyline Hotel", "Nueva York", "EE. UU.", 4, 560000, ("Manhattan y Central Park", 6, 210000), ("Luces de Broadway", 4, 280000), ("Estatua de la Libertad", 5, 190000)),
+    ("El Cairo, Egipto", "AUR310", "Bogotá", "El Cairo", "Nile View Palace", "El Cairo", "Egipto", 5, 270000, ("Pirámides de Giza y esfinge", 6, 230000), ("Museo Egipcio y bazar Khan el Khalili", 5, 170000), ("Crucero al atardecer por el Nilo", 3, 155000)),
 ]
 
 ESTADOS_RESERVA_SEMILLA = [
@@ -641,6 +654,84 @@ async def _asegurar_base_inicial() -> None:
                         activo=True,
                     )
                 )
+
+        for indice, datos in enumerate(PAQUETES_PUBLICADOS_SEMILLA):
+            (
+                destino_nombre, numero_vuelo, origen, ciudad, hotel_nombre, hotel_ciudad, hotel_pais,
+                estrellas, precio_noche, *datos_excursiones,
+            ) = datos
+            nombre_paquete = f"Aurora {destino_nombre.split(',')[0]}: experiencia completa"
+            paquete_existente = await sesion.scalar(select(Paquete).where(Paquete.nombre == nombre_paquete))
+            if paquete_existente is not None:
+                continue
+
+            destino = destinos_cache[destino_nombre]
+            fecha_salida = date(2026, 10, 5) + timedelta(days=4 * indice)
+            fecha_regreso = fecha_salida + timedelta(days=6 + indice % 3)
+            vuelo = await sesion.scalar(select(Vuelo).where(Vuelo.numero_vuelo == numero_vuelo))
+            if vuelo is None:
+                vuelo = Vuelo(
+                    numero_vuelo=numero_vuelo,
+                    aerolinea="Aurora Airlines",
+                    avion="Airbus A320" if indice % 2 == 0 else "Boeing 787",
+                    origen=origen,
+                    destino=ciudad,
+                    fecha_salida=datetime.combine(fecha_salida, time(7 + indice % 5, 30), tzinfo=timezone.utc),
+                    fecha_llegada=datetime.combine(fecha_salida, time(19 + indice % 3, 15), tzinfo=timezone.utc) + timedelta(days=1 if indice in (1, 5, 7) else 0),
+                    capacidad_maxima=180 if indice % 2 == 0 else 260,
+                    puerta=f"{chr(65 + indice % 4)}{10 + indice:02d}",
+                    terminal=str(1 + indice % 3),
+                    estado="programado",
+                    activo=True,
+                )
+                sesion.add(vuelo)
+                await sesion.flush()
+
+            hotel = await sesion.scalar(select(Hotel).where(Hotel.nombre == hotel_nombre))
+            if hotel is None:
+                hotel = Hotel(
+                    nombre=hotel_nombre,
+                    ciudad=hotel_ciudad,
+                    pais=hotel_pais,
+                    estrellas=estrellas,
+                    precio_noche=precio_noche,
+                    descripcion=f"Alojamiento seleccionado en {hotel_ciudad}, con desayuno, recepción 24 horas y ubicación estratégica para recorrer el destino.",
+                    activo=True,
+                )
+                sesion.add(hotel)
+                await sesion.flush()
+
+            excursiones = []
+            for numero_excursion, (nombre, duracion, precio) in enumerate(datos_excursiones, 1):
+                excursion = await sesion.scalar(select(Excursion).where(Excursion.nombre == nombre))
+                if excursion is None:
+                    excursion = Excursion(
+                        nombre=nombre,
+                        ciudad=hotel_ciudad,
+                        pais=hotel_pais,
+                        duracion_horas=duracion,
+                        precio=precio,
+                        descripcion=f"Experiencia guiada para conocer {hotel_ciudad} con acompañamiento local y tiempo para fotografías.",
+                        activo=True,
+                    )
+                    sesion.add(excursion)
+                    await sesion.flush()
+                excursiones.append(excursion)
+
+            precio_base = (Decimal(str(destino.precio_base)) * Decimal("1.12")).quantize(Decimal("0.01"))
+            sesion.add(
+                Paquete(
+                    nombre=nombre_paquete,
+                    destino_id=destino.id,
+                    vuelo_id=vuelo.id,
+                    hotel_id=hotel.id,
+                    fecha_salida=fecha_salida,
+                    fecha_regreso=fecha_regreso,
+                    precio_base=precio_base,
+                    activo=True,
+                    excursiones=excursiones,
+                )
+            )
 
         estados_reserva_cache: dict[str, EstadoReserva] = {}
         for codigo, nombre in ESTADOS_RESERVA_SEMILLA:

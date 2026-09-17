@@ -40,7 +40,52 @@ const vueloInicial = {
 
 const fechaLocal = (fecha) => (fecha ? fecha.slice(0, 16) : "");
 
-function VuelosPanel({ vuelos }) {
+function Paginacion({ pagina, totalPaginas, onCambiar }) {
+  if (totalPaginas <= 1) return null;
+  return (
+    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-borde pt-4 text-sm">
+      <span className="text-texto-suave">Página {pagina} de {totalPaginas}</span>
+      <div className="flex gap-2">
+        <button type="button" disabled={pagina === 1} onClick={() => onCambiar(pagina - 1)} className="rounded border border-borde px-3 py-1.5 font-semibold text-primario disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+        <button type="button" disabled={pagina === totalPaginas} onClick={() => onCambiar(pagina + 1)} className="rounded border border-borde px-3 py-1.5 font-semibold text-primario disabled:cursor-not-allowed disabled:opacity-40">Siguiente</button>
+      </div>
+    </div>
+  );
+}
+
+function VuelosPanel({ vuelos, esAdmin, onCrear, onActualizar, onEliminar }) {
+  const [nuevo, setNuevo] = useState(vueloInicial);
+  const [editando, setEditando] = useState(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [pagina, setPagina] = useState(1);
+
+  const actualizarCampo = (evento, setter) => {
+    const { name, value, type, checked } = evento.target;
+    setter((actual) => ({ ...actual, [name]: type === "checkbox" ? checked : value }));
+  };
+
+  const guardar = async (evento) => {
+    evento.preventDefault();
+    if (editando) {
+      await onActualizar(editando.id, editando);
+      setEditando(null);
+    } else {
+      await onCrear(nuevo);
+      setNuevo(vueloInicial);
+    }
+  };
+
+  const vuelosFiltrados = vuelos.filter((vuelo) =>
+    [vuelo.numeroVuelo, vuelo.aerolinea, vuelo.origen, vuelo.destino, vuelo.estado]
+      .join(" ")
+      .toLowerCase()
+      .includes(busqueda.toLowerCase()),
+  );
+  const totalPaginas = Math.max(1, Math.ceil(vuelosFiltrados.length / 10));
+  const vuelosVisibles = vuelosFiltrados.slice((pagina - 1) * 10, pagina * 10);
+
+  useEffect(() => setPagina(1), [busqueda]);
+
   return (
     <main className="mx-auto w-[92%] max-w-275 flex-1 py-12 sm:py-16">
       <span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
@@ -54,11 +99,14 @@ function VuelosPanel({ vuelos }) {
           <h2 className="font-display text-2xl font-bold text-primario">Información de vuelos</h2>
           {esAdmin && <span className="text-sm text-texto-suave">Gestión exclusiva de administración</span>}
         </div>
+        <input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="Buscar por vuelo, aerolínea, origen o destino" className="mt-5 w-full rounded-md border border-borde bg-fondo px-3 py-2 text-sm" />
         {vuelos.length === 0 ? (
           <p className="mt-4 text-sm text-texto-suave">No hay vuelos registrados.</p>
+        ) : vuelosVisibles.length === 0 ? (
+          <p className="mt-4 text-sm text-texto-suave">No hay vuelos que coincidan con la búsqueda.</p>
         ) : (
           <div className="mt-5 space-y-4">
-            {vuelos.map((vuelo) => (
+            {vuelosVisibles.map((vuelo) => (
               <article key={vuelo.id} className="rounded-md border border-borde p-5">
                 <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Vuelo</p><p className="mt-1 font-semibold text-texto">{vuelo.numeroVuelo} · {vuelo.aerolinea}</p></div>
@@ -70,8 +118,10 @@ function VuelosPanel({ vuelos }) {
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Puerta / terminal</p><p className="mt-1 text-texto">{vuelo.puerta || "-"} / {vuelo.terminal || "-"}</p></div>
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Estado</p><p className="mt-1 capitalize text-texto">{vuelo.estado}</p></div>
                 </div>
+                {esAdmin && <div className="mt-4 flex gap-3 border-t border-borde pt-4"><button type="button" onClick={() => setEditando({ ...vuelo, fechaSalida: fechaLocal(vuelo.fechaSalida), fechaLlegada: fechaLocal(vuelo.fechaLlegada) })} className="text-sm font-semibold text-primario">Modificar</button><button type="button" onClick={() => onEliminar(vuelo.id)} className="text-sm font-semibold text-red-700">Eliminar</button></div>}
               </article>
             ))}
+            <Paginacion pagina={pagina} totalPaginas={totalPaginas} onCambiar={setPagina} />
           </div>
         )}
       </section>
@@ -174,6 +224,8 @@ function Panel() {
   const [vista, setVista] = useState(parametros.get("vista") || "reservas");
   const [mensaje, setMensaje] = useState("");
   const [cargando, setCargando] = useState(true);
+  const [busquedaReservas, setBusquedaReservas] = useState("");
+  const [paginaReservas, setPaginaReservas] = useState(1);
   const [nuevoUsuario, setNuevoUsuario] = useState({
     nombre: "",
     apellido: "",
@@ -187,6 +239,15 @@ function Panel() {
   });
   const token = sesion?.token;
   const rol = sesion?.usuario.rol;
+  const reservasFiltradas = reservas.filter((reserva) =>
+    [reserva.cliente, reserva.destino, reserva.vuelo?.numeroVuelo, reserva.estado, reserva.estadoPago]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(busquedaReservas.toLowerCase()),
+  );
+  const totalPaginasReservas = Math.max(1, Math.ceil(reservasFiltradas.length / 10));
+  const reservasVisibles = reservasFiltradas.slice((paginaReservas - 1) * 10, paginaReservas * 10);
 
   useEffect(() => {
     if (!token) return;
@@ -215,6 +276,8 @@ function Panel() {
     };
     cargar();
   }, [token, rol]);
+
+  useEffect(() => setPaginaReservas(1), [busquedaReservas]);
 
   if (!sesion) return <Navigate to="/login" replace />;
   const headers = { Authorization: `Bearer ${sesion.token}` };
@@ -401,7 +464,7 @@ function Panel() {
       </main>
     );
 
-  if (vista === "reservas" && esPersonal)
+  if (vista === "reservas")
     return (
       <main className="mx-auto w-[92%] max-w-275 flex-1 py-12 sm:py-16 [&_button]:cursor-pointer">
         <span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
@@ -424,13 +487,18 @@ function Panel() {
             <h2 className="font-display text-2xl font-bold text-primario">
               {esPersonal ? "Solicitudes de viaje" : "Mis reservas"}
             </h2>
+            <input value={busquedaReservas} onChange={(evento) => setBusquedaReservas(evento.target.value)} placeholder="Buscar por cliente, destino, vuelo o estado" className="mt-5 w-full rounded-md border border-borde bg-fondo px-3 py-2 text-sm" />
             {reservas.length === 0 ? (
               <p className="mt-4 text-sm text-texto-suave">
                 Aún no hay solicitudes para mostrar.
               </p>
+            ) : reservasVisibles.length === 0 ? (
+              <p className="mt-4 text-sm text-texto-suave">
+                No hay solicitudes que coincidan con la búsqueda.
+              </p>
             ) : (
               <div className="mt-5 space-y-4">
-                {reservas.map((reserva) => (
+                {reservasVisibles.map((reserva) => (
                   <article
                     key={reserva.id}
                     className="rounded-md border border-borde p-5"
@@ -576,21 +644,23 @@ function Panel() {
                       </div>
                     </details>
                     <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-borde pt-4">
-                      <label className="text-sm font-semibold text-texto">
-                        Estado
-                        <select
-                          value={reserva.estado}
-                          onChange={(evento) =>
-                            actualizarEstado(reserva.id, evento.target.value)
-                          }
-                          className="ml-2 cursor-pointer rounded border border-borde bg-fondo px-2 py-1 font-normal"
-                        >
-                          <option value="pendiente">Pendiente</option>
-                          <option value="confirmada">Confirmada</option>
-                          <option value="cancelada">Cancelada</option>
-                        </select>
-                      </label>
-                      {(esAdmin || rol === "cliente") && (
+                      {esPersonal && (
+                        <label className="text-sm font-semibold text-texto">
+                          Estado
+                          <select
+                            value={reserva.estado}
+                            onChange={(evento) =>
+                              actualizarEstado(reserva.id, evento.target.value)
+                            }
+                            className="ml-2 cursor-pointer rounded border border-borde bg-fondo px-2 py-1 font-normal"
+                          >
+                            <option value="pendiente">Pendiente</option>
+                            <option value="confirmada">Confirmada</option>
+                            <option value="cancelada">Cancelada</option>
+                          </select>
+                        </label>
+                      )}
+                      {esPersonal && (
                         <button
                           type="button"
                           onClick={() => eliminarReserva(reserva.id)}
@@ -632,6 +702,7 @@ function Panel() {
                     )}
                   </article>
                 ))}
+                <Paginacion pagina={paginaReservas} totalPaginas={totalPaginasReservas} onCambiar={setPaginaReservas} />
               </div>
             )}
           </section>

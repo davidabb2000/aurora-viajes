@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { solicitar } from "../utils/api";
 
@@ -47,7 +47,8 @@ function Graficos({ datos }) {
 
 export default function AvanceCinco() {
   const { sesion } = useAuth();
-  const [pestana, setPestana] = useState("resumen");
+  const [parametros] = useSearchParams();
+  const [pestana, setPestana] = useState(parametros.get("vista") || "resumen");
   const [datos, setDatos] = useState(null);
   const [ventas, setVentas] = useState([]);
   const [facturas, setFacturas] = useState([]);
@@ -75,6 +76,10 @@ export default function AvanceCinco() {
   };
 
   useEffect(() => { if (sesion) cargar(); }, [sesion, filtros]);
+  useEffect(() => {
+    const vistaSolicitada = parametros.get("vista");
+    if (vistaSolicitada && pestanas.includes(vistaSolicitada)) setPestana(vistaSolicitada);
+  }, [parametros]);
   if (!sesion) return <Navigate to="/login" replace />;
 
   const registrarPqr = async (evento) => {
@@ -93,7 +98,6 @@ export default function AvanceCinco() {
   return <main className="mx-auto w-[92%] max-w-275 flex-1 py-10 sm:py-14">
     <div className="flex flex-wrap items-end justify-between gap-5"><div><span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">Quinto entregable</span><h1 className="mt-2 font-display text-4xl font-bold text-primario">Reservas y facturación</h1><p className="mt-2 max-w-2xl text-sm text-texto-suave">Cada reserva de viaje se convierte en una venta, factura y registro consultable.</p></div><span className="border border-borde bg-superficie px-3 py-2 text-xs font-semibold uppercase tracking-wide text-texto-suave">Rol: {rol}</span></div>
     {mensaje && <p className="mt-5 border border-borde bg-superficie p-3 text-sm text-texto">{mensaje}</p>}
-    <nav className="mt-8 flex gap-1 overflow-x-auto border-b border-borde">{pestanas.map((item) => <button key={item} type="button" onClick={() => setPestana(item)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold capitalize ${pestana === item ? "border-acento text-primario" : "border-transparent text-texto-suave"}`}>{item === "pqr" ? "PQR" : item}</button>)}</nav>
     <form className="mt-6 grid gap-3 border border-borde bg-superficie p-4 sm:grid-cols-2 lg:grid-cols-4" onSubmit={(evento) => evento.preventDefault()}><label className="text-xs font-semibold uppercase text-texto-suave">Desde<input type="date" value={filtros.desde} onChange={(evento) => setFiltros({ ...filtros, desde: evento.target.value })} className="mt-1 w-full border border-borde bg-fondo px-3 py-2 text-sm" /></label><label className="text-xs font-semibold uppercase text-texto-suave">Hasta<input type="date" value={filtros.hasta} onChange={(evento) => setFiltros({ ...filtros, hasta: evento.target.value })} className="mt-1 w-full border border-borde bg-fondo px-3 py-2 text-sm" /></label><label className="text-xs font-semibold uppercase text-texto-suave">Agrupar<select value={filtros.periodo} onChange={(evento) => setFiltros({ ...filtros, periodo: evento.target.value })} className="mt-1 w-full border border-borde bg-fondo px-3 py-2 text-sm"><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option></select></label><label className="text-xs font-semibold uppercase text-texto-suave">Estado<select value={filtros.estado} onChange={(evento) => setFiltros({ ...filtros, estado: evento.target.value })} className="mt-1 w-full border border-borde bg-fondo px-3 py-2 text-sm"><option value="">Todos</option><option value="completada">Completada</option><option value="pendiente">Pendiente</option><option value="cancelada">Cancelada</option></select></label></form>
     {pestana === "resumen" && <section className="mt-8 space-y-8">{datos ? <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Card titulo="Clientes" valor={datos.indicadores.usuarios} /><Card titulo="Reservas vendidas" valor={datos.indicadores.ventas} /><Card titulo="Facturación" valor={dinero(datos.indicadores.facturacion)} /><Card titulo="PQR pendientes" valor={datos.indicadores.pqrPendientes} /></div><Graficos datos={datos.ventasPorDia} /></> : <p className="border border-borde bg-superficie p-6 text-sm text-texto-suave">El resumen consolidado está disponible para administradores y empleados.</p>}</section>}
     {pestana === "reservas vendidas" && <section className="mt-8 border border-borde bg-superficie p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-2xl font-bold text-primario">Reservas vendidas</h2><p className="mt-1 text-sm text-texto-suave">El historial comercial se alimenta de las reservas de viaje creadas.</p></div><DescargarReportes headers={headers} /></div><div className="mt-5 divide-y divide-borde">{ventas.map((item) => <article key={item.id} className="grid gap-3 py-5 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="flex flex-wrap gap-3"><strong>Reserva / venta #{item.id}</strong><span className="capitalize text-sm text-primario">{estadoTexto(item.estado)}</span></div><p className="mt-1 text-sm text-texto">{item.detalles.map((detalle) => detalle.nombre).join(", ")}</p><p className="text-sm text-texto-suave">Cliente: {item.cliente?.nombre} · {item.fecha?.slice(0, 10)} · {item.detalles.reduce((total, detalle) => total + detalle.cantidad, 0)} pasajero(s)</p></div><strong className="text-lg text-primario">{dinero(item.total)}</strong></article>)}{ventas.length === 0 && <p className="py-5 text-sm text-texto-suave">Todavía no hay reservas vendidas para los filtros seleccionados.</p>}</div></section>}

@@ -89,6 +89,25 @@ function Sidebar() {
               <span className="text-xs opacity-60">→</span>
             </NavLink>
 
+            <p className="mb-3 mt-8 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#78917f]">Comercial</p>
+            {[
+              ["resumen", "Resumen", "◌"],
+              ["reservas vendidas", "Reservas vendidas", "▥"],
+              ["facturas", "Facturas", "▣"],
+              ["pqr", "PQR", "?"],
+              ["chatbot", "Chatbot", "✦"],
+            ].map(([vista, etiqueta, icono]) => (
+              <NavLink
+                key={vista}
+                to={`/panel/avance-cinco?vista=${encodeURIComponent(vista)}`}
+                className={() => enlaceClase(location.pathname === "/panel/avance-cinco" && vistaActiva === vista)}
+                onClick={() => setSidebarAbierto(false)}
+              >
+                <span className="flex items-center gap-3"><span className="text-base">{icono}</span> {etiqueta}</span>
+                <span className="text-xs opacity-60">→</span>
+              </NavLink>
+            ))}
+
             {rol === "administrador" && (
               <>
                 <NavLink
@@ -125,15 +144,6 @@ function Sidebar() {
                 </NavLink>
               </>
             )}
-
-            <NavLink
-              to="/panel/avance-cinco"
-              className={() => enlaceClase(location.pathname === "/panel/avance-cinco")}
-              onClick={() => setSidebarAbierto(false)}
-            >
-              <span className="flex items-center gap-3"><span className="text-base">◈</span> Quinto entregable</span>
-              <span className="text-xs opacity-60">→</span>
-            </NavLink>
 
             <p className="mb-3 mt-8 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#78917f]">Acceso rápido</p>
             <NavLink
