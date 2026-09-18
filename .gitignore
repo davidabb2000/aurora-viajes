@@ -32,3 +32,6 @@ npm-debug.log*
 # Instalador suelto (no pertenece al repo)
 frontend/src/assets/images/Postman (x64).exe
 backend/biblioapi.db
+
+# Estado local de wrangler (Cloudflare)
+.wrangler/

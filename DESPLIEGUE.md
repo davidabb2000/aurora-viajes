@@ -75,9 +75,9 @@ Lo que mas gasta en este proyecto es tener tres contenedores encendidos las 24 h
 
 Es lo primero. En **Settings → Usage** del workspace se fijan limites blando y duro; al llegar al duro Railway apaga las cargas. Evita que un bucle de reinicios se coma el credito de un dia para otro.
 
-### 2. Saca el frontend de Railway
+### 2. El frontend ya no esta en Railway
 
-El frontend son archivos estaticos: no necesita un contenedor encendido. **Cloudflare Pages lo sirve gratis y sin limite practico**. Elimina un tercio del gasto sin perder nada. Root directory `frontend`, build `npm run build`, salida `dist`, y la variable `VITE_API_URL`. El enrutado del SPA funciona solo porque el build no genera `404.html`.
+Se sirve desde Cloudflare, gratis, en `https://aurora-viajes.carousel-app.workers.dev`. Los detalles estan mas abajo, en "Frontend en Cloudflare".
 
 ### 3. Activa Serverless en el backend
 
@@ -108,6 +108,34 @@ Las dependencias del modelo de riesgo (pandas, numpy, scikit-learn, scipy y sus 
 ### 7. Borra lo que no uses
 
 Servicios viejos, entornos de prueba y despliegues parados siguen ocupando. Un proyecto duplicado gasta el doble.
+
+---
+
+## Frontend en Cloudflare
+
+El frontend **no se despliega en Railway**: son archivos estaticos y no necesitan un contenedor encendido.
+
+Cloudflare fusiono Pages con Workers, asi que `wrangler pages deploy` crea en realidad un **Worker con assets estaticos**, no un proyecto de Pages clasico. Por eso la URL es `*.workers.dev` y no `*.pages.dev`, y `wrangler pages project list` aparece vacio. Funcionalmente es equivalente para una SPA.
+
+La configuracion vive en `frontend/wrangler.jsonc`. `not_found_handling: "single-page-application"` es lo que hace que cualquier ruta desconocida devuelva `index.html` y la resuelva React Router.
+
+Para desplegar:
+
+```bash
+cd frontend
+VITE_API_URL=https://TU-BACKEND.up.railway.app/api npm run build
+wrangler deploy
+```
+
+**La variable es obligatoria en el build.** Vite la incrusta en el bundle; si se compila sin ella, el valor cae al `/api` por defecto, que apunta al propio Worker, y ninguna llamada funciona. Merece la pena comprobarlo antes de subir:
+
+```bash
+grep -o "TU-BACKEND" dist/assets/*.js
+```
+
+Tras cambiar la URL del frontend hay que actualizar `ORIGENES_PERMITIDOS` y `FRONTEND_URL` en el backend y redesplegarlo.
+
+> Al ejecutar `wrangler pages project create` por primera vez, wrangler modifica el proyecto sin preguntar: anade `@cloudflare/vite-plugin` y `wrangler` a las dependencias, mete `cloudflare()` en `vite.config.js`, reescribe los scripts de `package.json` y crea `wrangler.jsonc`. Ademas recompila el build, **descartando las variables de entorno** que se pasaron antes.
 
 ---
 
