@@ -1,5 +1,26 @@
 # Despliegue de Aurora Viajes en Railway
 
+## Despliegue actual
+
+| Recurso   | URL / nombre |
+|-----------|--------------|
+| Frontend  | https://aurora-frontend-production-a83d.up.railway.app |
+| Backend   | https://aurora-viajes-production.up.railway.app |
+| Salud     | https://aurora-viajes-production.up.railway.app/api/health |
+| Proyecto  | `fortunate-adaptation` (servicios `aurora-frontend`, `aurora-viajes`, `MySQL`) |
+
+El backend crea el esquema y carga los datos iniciales al arrancar. `DEPURACION=false` deja `/docs` deshabilitado a proposito.
+
+### Problemas que costaron el primer intento
+
+Tres cosas que no se reproducen en local y conviene recordar:
+
+- **`cryptography` en `requirements.txt`.** MySQL 8 de Railway autentica con `caching_sha2_password` y PyMySQL necesita ese paquete. MySQL de XAMPP usa `mysql_native_password`, por eso no aparecia en desarrollo.
+- **Claves foraneas con signo.** MySQL exige que la columna que referencia y la referenciada tengan el mismo tipo, incluido el signo. SQLite no valida esto.
+- **`VITE_API_URL` se incrusta en tiempo de build.** Cambiarla obliga a redesplegar el frontend, no basta con guardar la variable.
+
+---
+
 Aurora Viajes se despliega como **tres servicios** dentro de un mismo proyecto de Railway:
 
 | Servicio   | Origen                        | Rol                                  |
