@@ -210,7 +210,7 @@ class Paquete(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(140), nullable=False)
-    destino_id: Mapped[int] = mapped_column(MySQLInteger(unsigned=True), ForeignKey("destinos.id"), nullable=False)
+    destino_id: Mapped[int] = mapped_column(ForeignKey("destinos.id"), nullable=False)
     vuelo_id: Mapped[int] = mapped_column(ForeignKey("vuelos.id"), nullable=False)
     hotel_id: Mapped[int] = mapped_column(ForeignKey("hoteles.id"), nullable=False)
     fecha_salida: Mapped[date] = mapped_column(Date, nullable=False)
@@ -274,8 +274,8 @@ class Venta(Base):
     __tablename__ = "ventas"
 
     id: Mapped[int] = mapped_column(MySQLInteger(unsigned=True), primary_key=True)
-    cliente_id: Mapped[int] = mapped_column(MySQLInteger(unsigned=True), ForeignKey("usuarios.id"), nullable=False, index=True)
-    usuario_id: Mapped[int | None] = mapped_column(MySQLInteger(unsigned=True), ForeignKey("usuarios.id"), nullable=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     subtotal: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     descuento: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     impuestos: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
@@ -336,7 +336,7 @@ class PQR(Base):
     __tablename__ = "pqr"
 
     id: Mapped[int] = mapped_column(MySQLInteger(unsigned=True), primary_key=True)
-    cliente_id: Mapped[int] = mapped_column(MySQLInteger(unsigned=True), ForeignKey("usuarios.id"), nullable=False, index=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
     tipo: Mapped[str] = mapped_column(String(30), nullable=False)
     asunto: Mapped[str] = mapped_column(String(140), nullable=False)
     descripcion: Mapped[str] = mapped_column(Text, nullable=False)
@@ -352,7 +352,7 @@ class Conversacion(Base):
     __tablename__ = "conversaciones"
 
     id: Mapped[int] = mapped_column(MySQLInteger(unsigned=True), primary_key=True)
-    cliente_id: Mapped[int | None] = mapped_column(MySQLInteger(unsigned=True), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True)
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
