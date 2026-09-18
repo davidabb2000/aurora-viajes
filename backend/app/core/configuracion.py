@@ -31,6 +31,10 @@ class Configuracion(BaseSettings):
     url_base_datos: str = ""
     # Proveedores como Aiven o Clever Cloud exigen TLS. Puede forzarse con
     # MYSQL_SSL=true o deducirse del ssl-mode que traiga la propia URL.
+    # Con true no se mantienen conexiones abiertas entre peticiones. Cuesta unos
+    # milisegundos por peticion, pero permite que el modo serverless de Railway
+    # llegue a dormir el servicio: un pool ocioso lo mantiene despierto.
+    bd_sin_pool: bool = False
     mysql_ssl: bool = False
     mysql_ssl_ca: str | None = None
     argumentos_conexion: dict = {}
