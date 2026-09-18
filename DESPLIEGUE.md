@@ -101,7 +101,9 @@ En **Settings → Resources** se topan CPU y memoria. El backend consume unos 10
 
 ### 6. Despliega menos veces
 
-Cada build consume computo. Agrupa los cambios en un commit en vez de empujar seis seguidos, sobre todo en el backend, cuyo build compila dependencias pesadas.
+Cada build consume computo. Agrupa los cambios en un commit en vez de empujar seis seguidos.
+
+Las dependencias del modelo de riesgo (pandas, numpy, scikit-learn, scipy y sus transitivas) estan separadas en `backend/requirements-ml.txt` y **no** se instalan en la imagen: nada las carga en ejecucion, porque solo se importan dentro de `app/services/riesgo.py` y su router no esta registrado en `main.py`. Eso acorta bastante cada build. Para reactivar el modelo, instala ese fichero tambien desde el `Dockerfile`.
 
 ### 7. Borra lo que no uses
 

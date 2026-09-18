@@ -1,0 +1,19 @@
+# Dependencias del modelo de riesgo de retraso (modelos/riesgo_retraso.joblib).
+# Se separan de requirements.txt porque nada las carga en ejecucion: solo se
+# importan dentro de app/services/riesgo.py, y su router (app/routers/sistema.py)
+# no esta registrado en main.py. Instalarlas alargaba cada build sin aportar nada.
+#
+# Para reactivar el modelo:
+#   pip install -r requirements-ml.txt
+# y en backend/Dockerfile anadir esa instalacion junto a requirements.txt.
+cloudpickle==3.1.2
+joblib==1.6.0
+narwhals==2.25.0
+numpy==2.5.2
+pandas==3.0.5
+python-dateutil==2.9.0.post0
+scikit-learn==1.9.0
+scipy==1.18.1
+six==1.17.0
+threadpoolctl==3.6.0
+tzdata==2026.3
