@@ -1,5 +1,8 @@
+import json
+from typing import Annotated
+
 from pydantic import field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Configuracion(BaseSettings):
@@ -8,7 +11,7 @@ class Configuracion(BaseSettings):
     nombre_app: str = "Aurora Viajes API"
     entorno: str = "desarrollo"
     depuracion: bool = True
-    origenes_permitidos: list[str] = [
+    origenes_permitidos: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
@@ -48,6 +51,31 @@ class Configuracion(BaseSettings):
     smtp_from: str = "noreply@auroraviajes.com"
     smtp_use_tls: bool = True
 
+    @field_validator("origenes_permitidos", mode="before")
+    @classmethod
+    def normalizar_origenes(cls, value):
+        """Acepta JSON (["https://a","https://b"]) o una lista separada por comas.
+
+        En paneles como Railway es facil escribir el valor sin comillas; sin esto
+        la aplicacion no arranca por un error de parseo de JSON.
+        """
+        if value is None or isinstance(value, list):
+            return value
+        texto = str(value).strip()
+        if not texto:
+            return []
+        if texto.startswith("["):
+            try:
+                return json.loads(texto)
+            except json.JSONDecodeError:
+                texto = texto.strip("[]")
+        limpios = []
+        for parte in texto.split(","):
+            origen = parte.strip().strip('"').strip("'").rstrip("/")
+            if origen:
+                limpios.append(origen)
+        return limpios
+
     @field_validator("proveedor_ia_api_key", mode="before")
     @classmethod
     def normalizar_clave_ia(cls, value):
@@ -74,6 +102,9 @@ class Configuracion(BaseSettings):
                 url = f"mysql+{self.mysql_driver}://{url[len('mysql://'):]}"
             elif url.startswith("mysql+pymysql://"):
                 url = f"mysql+{self.mysql_driver}://{url[len('mysql+pymysql://'):]}"
+            if url.startswith("mysql+") and "charset=" not in url:
+                # Sin charset explicito MySQL puede caer en latin1 y romper tildes/enies.
+                url = f"{url}{'&' if '?' in url else '?'}charset={self.mysql_charset}"
             self.url_base_datos = url
         elif self.motor_bd.lower() == "mysql":
             credenciales = self.mysql_user

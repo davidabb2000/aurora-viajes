@@ -1,0 +1,30 @@
+# Entornos locales
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Secretos y datos locales
+.env
+.env.*
+!.env.example
+*.db
+.coverage
+
+# Pruebas y herramientas
+tests/
+.pytest_cache/
+.postman/
+postman/
+sql/
+scripts/__pycache__/
+
+# Notas y documentacion
+*.md
+*.txt
+!requirements.txt
+
+# Git
+.git/
+.gitignore
