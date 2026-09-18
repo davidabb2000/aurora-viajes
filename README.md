@@ -104,15 +104,15 @@ Para IA y despliegue, configura las variables `PROVEEDOR_IA_API_KEY`, `PROVEEDOR
 
 ### Despliegue
 
-El backend y el frontend tienen cada uno su `Dockerfile` y su `railway.json`, y se despliegan como dos servicios separados en Railway contra una base MySQL gestionada.
+El backend corre en **Render** como contenedor Docker y el frontend en **Cloudflare Pages** como build estatico de Vite. La base de datos es un MySQL gestionado externo, porque Render solo ofrece PostgreSQL y este backend usa DDL y tipos propios de MySQL.
 
-El procedimiento completo, con las variables exactas de cada servicio, está en **[DESPLIEGUE_RAILWAY.md](DESPLIEGUE_RAILWAY.md)**.
+El procedimiento completo, con las variables de cada servicio, esta en **[DESPLIEGUE.md](DESPLIEGUE.md)**.
 
 Resumen:
 
-- Servicio `backend`: raíz `backend`, escucha el puerto de `PORT` y expone `/api/health`. Crea el esquema y carga los datos iniciales al arrancar.
-- Servicio `frontend`: raíz `frontend`, nginx sirve el build de Vite en el puerto de `PORT`. `VITE_API_URL` se incrusta en tiempo de build, así que cambiarla exige redesplegar.
-- Base de datos: servicio MySQL de Railway, referenciado desde el backend con `DATABASE_URL=${{MySQL.MYSQL_URL}}`.
+- Backend: blueprint [`render.yaml`](render.yaml), escucha el puerto de `PORT` y expone `/api/health`. Crea el esquema y carga los datos iniciales al arrancar. En el plan gratuito se apaga tras 15 minutos sin trafico.
+- Frontend: raiz `frontend`, build `npm run build`, salida `dist`. `VITE_API_URL` se incrusta en tiempo de build, asi que cambiarla exige redesplegar.
+- Base de datos: MySQL externo (Aiven, Clever Cloud u otro). El backend normaliza la URL y activa TLS solo si el proveedor lo pide.
 
 No incluyas claves reales en el repositorio: van en las variables de cada servicio.
 

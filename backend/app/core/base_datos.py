@@ -9,6 +9,11 @@ motor = create_async_engine(
     configuracion.url_base_datos,
     echo=configuracion.depuracion,
     pool_pre_ping=True,
+    # Vacio en local; lleva el contexto TLS cuando la base es gestionada.
+    connect_args=configuracion.argumentos_conexion,
+    # Los hosts gestionados cierran conexiones ociosas: reciclarlas evita
+    # el "MySQL server has gone away" tras periodos de inactividad.
+    pool_recycle=280,
 )
 
 FabricaDeSesiones = async_sessionmaker(

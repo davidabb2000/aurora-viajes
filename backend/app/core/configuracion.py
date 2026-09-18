@@ -1,5 +1,7 @@
 import json
+import ssl
 from typing import Annotated
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -27,6 +29,11 @@ class Configuracion(BaseSettings):
     mysql_driver: str = "aiomysql"
     database_url: str | None = None
     url_base_datos: str = ""
+    # Proveedores como Aiven o Clever Cloud exigen TLS. Puede forzarse con
+    # MYSQL_SSL=true o deducirse del ssl-mode que traiga la propia URL.
+    mysql_ssl: bool = False
+    mysql_ssl_ca: str | None = None
+    argumentos_conexion: dict = {}
 
     secret_key: str
     algoritmo_jwt: str = "HS256"
@@ -56,8 +63,8 @@ class Configuracion(BaseSettings):
     def normalizar_origenes(cls, value):
         """Acepta JSON (["https://a","https://b"]) o una lista separada por comas.
 
-        En paneles como Railway es facil escribir el valor sin comillas; sin esto
-        la aplicacion no arranca por un error de parseo de JSON.
+        En los paneles de Render o Cloudflare es facil escribir el valor sin
+        comillas; sin esto la aplicacion no arranca por un error de parseo JSON.
         """
         if value is None or isinstance(value, list):
             return value
@@ -94,6 +101,27 @@ class Configuracion(BaseSettings):
             return "https://api.groq.com/openai/v1/chat/completions"
         return "llama-3.1-8b-instant"
 
+    # Parametros que los proveedores ponen en la URL y que aiomysql no acepta:
+    # se interpretan aqui y se quitan antes de entregarsela a SQLAlchemy.
+    _PARAMETROS_SSL = ("ssl-mode", "sslmode", "ssl_mode", "ssl-ca", "sslca", "ssl_ca")
+
+    def _depurar_url_mysql(self, url: str) -> tuple[str, bool]:
+        """Devuelve la URL sin parametros de SSL y si el proveedor pidio TLS."""
+        partes = urlsplit(url)
+        consulta = parse_qsl(partes.query, keep_blank_values=True)
+        exige_tls = False
+        limpia = []
+        for clave, valor in consulta:
+            if clave.lower() not in self._PARAMETROS_SSL:
+                limpia.append((clave, valor))
+                continue
+            if clave.lower() in ("ssl-ca", "sslca", "ssl_ca"):
+                self.mysql_ssl_ca = valor or self.mysql_ssl_ca
+                exige_tls = True
+            elif valor.upper() not in ("DISABLED", "FALSE", "0", ""):
+                exige_tls = True
+        return urlunsplit(partes._replace(query=urlencode(limpia))), exige_tls
+
     @model_validator(mode="after")
     def construir_url_base_datos(self):
         if self.database_url:
@@ -102,6 +130,10 @@ class Configuracion(BaseSettings):
                 url = f"mysql+{self.mysql_driver}://{url[len('mysql://'):]}"
             elif url.startswith("mysql+pymysql://"):
                 url = f"mysql+{self.mysql_driver}://{url[len('mysql+pymysql://'):]}"
+            if url.startswith("mysql+"):
+                url, exige_tls = self._depurar_url_mysql(url)
+                if exige_tls:
+                    self.mysql_ssl = True
             if url.startswith("mysql+") and "charset=" not in url:
                 # Sin charset explicito MySQL puede caer en latin1 y romper tildes/enies.
                 url = f"{url}{'&' if '?' in url else '?'}charset={self.mysql_charset}"
@@ -117,6 +149,15 @@ class Configuracion(BaseSettings):
             )
         else:
             self.url_base_datos = f"sqlite+aiosqlite:///{self.sqlite_path}"
+
+        if self.url_base_datos.startswith("mysql+") and self.mysql_ssl:
+            contexto = ssl.create_default_context(cafile=self.mysql_ssl_ca or None)
+            if self.mysql_ssl_ca is None:
+                # Sin CA propia se cifra igual, pero no se verifica el certificado:
+                # los hosts gestionados suelen usar una CA privada.
+                contexto.check_hostname = False
+                contexto.verify_mode = ssl.CERT_NONE
+            self.argumentos_conexion = {"ssl": contexto}
         return self
 
 
