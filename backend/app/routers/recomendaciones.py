@@ -133,11 +133,26 @@ async def recomendar_destinos(
         async with httpx.AsyncClient(timeout=configuracion.proveedor_ia_timeout) as cliente:
             servicio = ServicioDeRecomendaciones(cliente)
             crudas = await servicio.recomendar(payload.intereses, catalogo, instruccion=INSTRUCCION_DESTINOS)
-        recomendaciones = [
-            DestinoRecomendado(**item)
-            for item in crudas
-            if item.get("destino_id") in {destino["destino_id"] for destino in catalogo}
-        ]
+        # Del modelo solo se toma el motivo. Los datos del destino (pais, precio,
+        # imagen) salen del catalogo: DestinoRecomendado exige 'pais', que el
+        # prompt nunca pide, y confiar en el modelo para cifras lo dejaria
+        # inventarlas.
+        por_id = {destino["destino_id"]: destino for destino in catalogo}
+        recomendaciones = []
+        for item in crudas:
+            if not isinstance(item, dict):
+                continue
+            try:
+                identificador = int(item.get("destino_id"))
+            except (TypeError, ValueError):
+                continue
+            destino = por_id.get(identificador)
+            if destino is None:
+                continue
+            motivo = str(item.get("motivo") or "").strip()
+            if not motivo:
+                continue
+            recomendaciones.append(DestinoRecomendado(**{**destino, "motivo": motivo}))
         if not recomendaciones:
             raise ProveedorNoDisponible("El proveedor devolvió destinos que no están en el catálogo.")
         return RespuestaDeRecomendacionDestino(recomendaciones=recomendaciones[:3], generada_por="modelo_externo")
