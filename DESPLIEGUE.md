@@ -91,9 +91,13 @@ BD_SIN_POOL=true
 
 Con esa variable no se mantienen conexiones ociosas: cada peticion abre y cierra la suya. Cuesta unos milisegundos por peticion y es lo que permite que el servicio llegue a dormirse de verdad. Sin ella, activar Serverless no sirve de nada en esta aplicacion.
 
-### 4. La base de datos no duerme
+### 4. La base de datos ya no esta en Railway
 
-Un servicio MySQL corre siempre, y ademas paga volumen. Si el gasto aprieta, un MySQL gestionado gratuito fuera de Railway (Aiven, Clever Cloud) quita ese coste por completo: basta poner su URL en `DATABASE_URL`. El backend la normaliza sola y activa TLS si el proveedor lo pide.
+Un servicio MySQL corre siempre y ademas paga volumen, asi que era el mayor gasto fijo. La base vive ahora en el plan gratuito de **Aiven** (1 GB, sin caducidad ni tarjeta). Solo hubo que poner su URL en `DATABASE_URL`: el backend la normaliza sola, convierte el esquema a `mysql+aiomysql://`, fuerza `charset=utf8mb4` y activa TLS al detectar `ssl-mode=REQUIRED`.
+
+No hizo falta migrar datos: el catalogo, los roles y el usuario administrador se recrean en cada arranque.
+
+Aiven apaga el servicio tras inactividad prolongada, avisando antes.
 
 ### 5. Limita los recursos por replica
 
@@ -150,3 +154,13 @@ Tras cambiar la URL del frontend hay que actualizar `ORIGENES_PERMITIDOS` y `FRO
 **`'cryptography' package is required for ... caching_sha2_password`.** MySQL 8 usa ese metodo y PyMySQL necesita `cryptography`, que ya esta en `requirements.txt`.
 
 **Tildes y enies mal.** El backend fuerza `charset=utf8mb4` cuando la URL no lo trae.
+
+**En Windows, conectar a la base con TLS falla con `[WinError 87] El parametro no es correcto`.** Es un problema del bucle Proactor de asyncio con SSL, no del servidor ni del codigo: en Linux, que es lo que corre el contenedor, no ocurre. Para reproducirlo en local contra una base gestionada, usa el bucle Selector antes de arrancar:
+
+```python
+import asyncio, sys
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+```
+
+Para el desarrollo diario contra el MySQL local de XAMPP no aplica, porque ahi no se usa TLS.
