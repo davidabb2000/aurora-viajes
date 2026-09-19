@@ -35,3 +35,6 @@ backend/biblioapi.db
 
 # Estado local de wrangler (Cloudflare)
 .wrangler/
+
+# Estado local de las herramientas de Claude Code
+.claude/
