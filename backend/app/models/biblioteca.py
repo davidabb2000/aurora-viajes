@@ -23,6 +23,14 @@ paquete_excursiones = Table(
     Column("excursion_id", Integer, ForeignKey("excursiones.id"), primary_key=True),
 )
 
+# Permite armar una reserva a la carta, sin depender de un paquete prearmado.
+reserva_excursiones = Table(
+    "reserva_excursiones",
+    Base.metadata,
+    Column("reserva_id", Integer, ForeignKey("reservas.id", ondelete="CASCADE"), primary_key=True),
+    Column("excursion_id", Integer, ForeignKey("excursiones.id"), primary_key=True),
+)
+
 
 class Role(Base):
     __tablename__ = "roles"
@@ -233,6 +241,7 @@ class Reserva(Base):
     destino_id: Mapped[int] = mapped_column(ForeignKey("destinos.id"), nullable=False, index=True)
     vuelo_id: Mapped[int | None] = mapped_column(ForeignKey("vuelos.id"), nullable=True, index=True)
     paquete_id: Mapped[int | None] = mapped_column(ForeignKey("paquetes.id"), nullable=True, index=True)
+    hotel_id: Mapped[int | None] = mapped_column(ForeignKey("hoteles.id"), nullable=True, index=True)
     fecha_salida: Mapped[date] = mapped_column(Date, nullable=False)
     fecha_regreso: Mapped[date] = mapped_column(Date, nullable=False)
     pasajeros: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -242,6 +251,11 @@ class Reserva(Base):
     estado_pago_id: Mapped[int] = mapped_column(ForeignKey("estados_pago.id"), nullable=False)
     metodo_pago_id: Mapped[int | None] = mapped_column(ForeignKey("metodos_pago.id"), nullable=True)
     monto_total: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    # Desglose guardado al crear la reserva: permite que la factura detalle
+    # cada concepto y que el total no dependa de precios que cambien despues.
+    monto_vuelo: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    monto_hotel: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    monto_excursiones: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     stripe_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     actualizado_en: Mapped[datetime] = mapped_column(
@@ -255,6 +269,8 @@ class Reserva(Base):
     destino_rel: Mapped[Destino] = relationship(back_populates="reservas", lazy="joined")
     vuelo_rel: Mapped[Vuelo | None] = relationship(back_populates="reservas", lazy="joined")
     paquete_rel: Mapped[Paquete | None] = relationship(back_populates="reservas", lazy="joined")
+    hotel_rel: Mapped["Hotel | None"] = relationship(lazy="joined")
+    excursiones: Mapped[list["Excursion"]] = relationship(secondary=reserva_excursiones, lazy="selectin")
     estado_rel: Mapped[EstadoReserva] = relationship(back_populates="reservas", lazy="joined")
     estado_pago_rel: Mapped[EstadoPago] = relationship(back_populates="reservas", lazy="joined")
     metodo_pago_rel: Mapped[MetodoPago | None] = relationship(back_populates="reservas", lazy="joined")

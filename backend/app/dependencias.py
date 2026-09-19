@@ -93,6 +93,8 @@ async def reserva_de_ruta(sesion: SesionDep, reserva_id: Annotated[int, Path(ge=
             selectinload(Reserva.usuario).selectinload(User.tipo_documento_catalogo),
             selectinload(Reserva.destino_rel).selectinload(Destino.pais),
             selectinload(Reserva.vuelo_rel),
+            selectinload(Reserva.hotel_rel),
+            selectinload(Reserva.excursiones),
             selectinload(Reserva.estado_rel),
             selectinload(Reserva.estado_pago_rel),
             selectinload(Reserva.metodo_pago_rel),

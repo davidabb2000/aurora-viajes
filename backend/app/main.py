@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 
 import jwt
 import httpx
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -395,16 +395,36 @@ class ReservaCreate(BaseModel):
     destinoId: int | None = Field(default=None, ge=1)
     vueloId: int | None = Field(default=None, ge=1)
     paqueteId: int | None = Field(default=None, ge=1)
+    hotelId: int | None = Field(default=None, ge=1)
+    excursionIds: list[int] = Field(default_factory=list, max_length=10)
     fechaSalida: date
     fechaRegreso: date
     pasajeros: int = Field(..., ge=1, le=9)
     telefonoContacto: str = Field(..., min_length=7, max_length=10)
     notas: str | None = Field(None, max_length=300)
 
+    @field_validator("excursionIds")
+    @classmethod
+    def validar_excursiones(cls, value: list[int]) -> list[int]:
+        if any(identificador < 1 for identificador in value):
+            raise ValueError("Hay una excursión con identificador inválido.")
+        # Elegir dos veces la misma excursion no debe cobrarse dos veces.
+        return list(dict.fromkeys(value))
+
     @model_validator(mode="after")
     def validar_destino(self):
         if self.destino is None and self.destinoId is None:
             raise ValueError("Selecciona un destino válido.")
+        return self
+
+    @model_validator(mode="after")
+    def validar_fechas(self):
+        if self.fechaRegreso < self.fechaSalida:
+            raise ValueError("La fecha de regreso no puede ser anterior a la de salida.")
+        if self.fechaSalida < date.today():
+            raise ValueError("No se puede reservar un viaje con fecha de salida ya pasada.")
+        if (self.fechaRegreso - self.fechaSalida).days > 365:
+            raise ValueError("El viaje no puede durar más de un año.")
         return self
 
     @field_validator("telefonoContacto")
@@ -568,6 +588,23 @@ def _reserva_a_dict(reserva: Reserva) -> dict:
         "vuelo": _vuelo_a_dict(reserva.vuelo_rel) if reserva.vuelo_rel else None,
         "paqueteId": reserva.paquete_id,
         "paquete": _paquete_a_dict(reserva.paquete_rel) if reserva.paquete_rel else None,
+        "hotelId": reserva.hotel_id,
+        "hotel": {
+            "id": reserva.hotel_rel.id,
+            "nombre": reserva.hotel_rel.nombre,
+            "ciudad": reserva.hotel_rel.ciudad,
+            "estrellas": reserva.hotel_rel.estrellas,
+            "precioNoche": float(reserva.hotel_rel.precio_noche or 0),
+        } if reserva.hotel_rel else None,
+        "excursiones": [
+            {
+                "id": excursion.id,
+                "nombre": excursion.nombre,
+                "duracionHoras": excursion.duracion_horas,
+                "precio": float(excursion.precio or 0),
+            }
+            for excursion in (reserva.excursiones or [])
+        ],
         "fechaSalida": reserva.fecha_salida.isoformat(),
         "fechaRegreso": reserva.fecha_regreso.isoformat(),
         "pasajeros": reserva.pasajeros,
@@ -577,6 +614,11 @@ def _reserva_a_dict(reserva: Reserva) -> dict:
         "estadoPago": reserva.estado_pago_rel.codigo if reserva.estado_pago_rel else "pendiente",
         "metodoPago": reserva.metodo_pago_rel.codigo if reserva.metodo_pago_rel else None,
         "montoTotal": float(reserva.monto_total or 0),
+        "desglose": {
+            "vuelo": float(reserva.monto_vuelo or 0),
+            "hotel": float(reserva.monto_hotel or 0),
+            "excursiones": float(reserva.monto_excursiones or 0),
+        },
         "stripeSessionId": reserva.stripe_session_id,
     }
 
@@ -896,11 +938,63 @@ def _url_frontend(ruta: str) -> str:
     return f"{configuracion.frontend_url.rstrip('/')}/{ruta.lstrip('/')}"
 
 
-def _calcular_monto_reserva(destino: Destino, fecha_salida: date, fecha_regreso: date, pasajeros: int) -> Decimal:
-    dias = (fecha_regreso - fecha_salida).days
-    if dias < 1:
-        dias = 1
-    return Decimal(destino.precio_base or 0) * Decimal(str(pasajeros)) * Decimal(str(dias))
+def _noches_de_viaje(fecha_salida: date, fecha_regreso: date) -> int:
+    return max(1, (fecha_regreso - fecha_salida).days)
+
+
+def _habitaciones_para(pasajeros: int) -> int:
+    """Dos personas por habitacion, redondeando hacia arriba."""
+    return (pasajeros + 1) // 2
+
+
+class DesgloseReserva(BaseModel):
+    """Precio de la reserva separado por concepto.
+
+    Guardarlo permite que la factura detalle cada linea y que el total quede
+    congelado: si manana sube el precio de un hotel, la reserva ya emitida no
+    cambia.
+    """
+
+    vuelo: Decimal
+    hotel: Decimal
+    excursiones: Decimal
+
+    @property
+    def total(self) -> Decimal:
+        return (self.vuelo + self.hotel + self.excursiones).quantize(Decimal("0.01"))
+
+
+def _calcular_desglose_reserva(
+    destino: Destino,
+    hotel: "Hotel | None",
+    excursiones: "list[Excursion]",
+    fecha_salida: date,
+    fecha_regreso: date,
+    pasajeros: int,
+) -> DesgloseReserva:
+    """Precio por concepto: vuelo por pasajero, hotel por noche y habitacion,
+    excursiones por pasajero.
+
+    Antes el total era precio_base x pasajeros x dias, lo que hacia que el
+    "vuelo" costase siete veces mas por alargar el viaje una semana e ignoraba
+    por completo el hotel y las excursiones, que ni siquiera podian reservarse.
+    """
+    noches = _noches_de_viaje(fecha_salida, fecha_regreso)
+    viajeros = Decimal(str(pasajeros))
+
+    monto_vuelo = (Decimal(destino.precio_base or 0) * viajeros).quantize(Decimal("0.01"))
+
+    monto_hotel = Decimal("0")
+    if hotel is not None:
+        habitaciones = Decimal(str(_habitaciones_para(pasajeros)))
+        monto_hotel = (Decimal(hotel.precio_noche or 0) * Decimal(str(noches)) * habitaciones).quantize(Decimal("0.01"))
+
+    monto_excursiones = Decimal("0")
+    for excursion in excursiones:
+        monto_excursiones += Decimal(excursion.precio or 0) * viajeros
+    monto_excursiones = monto_excursiones.quantize(Decimal("0.01"))
+
+    return DesgloseReserva(vuelo=monto_vuelo, hotel=monto_hotel, excursiones=monto_excursiones)
 
 
 def _normalizar_texto(value: str) -> str:
@@ -1055,6 +1149,21 @@ async def _restriccion_existe(sesion: SesionDep, tabla: str, restriccion: str) -
 async def _migrar_esquema_legacy(sesion: SesionDep) -> None:
     if not sesion.bind or sesion.bind.dialect.name != "mysql":
         return
+
+    # Columnas de hotel y desglose: create_all no altera tablas existentes.
+    if not await _columna_existe(sesion, "reservas", "hotel_id"):
+        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN hotel_id INT NULL AFTER paquete_id"))
+        await sesion.execute(
+            text(
+                "ALTER TABLE reservas ADD CONSTRAINT fk_reserva_hotel "
+                "FOREIGN KEY (hotel_id) REFERENCES hoteles(id) ON DELETE RESTRICT"
+            )
+        )
+    for columna in ("monto_vuelo", "monto_hotel", "monto_excursiones"):
+        if not await _columna_existe(sesion, "reservas", columna):
+            await sesion.execute(
+                text(f"ALTER TABLE reservas ADD COLUMN {columna} DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER monto_total")
+            )
 
     if not await _columna_existe(sesion, "reservas", "paquete_id"):
         await sesion.execute(text("ALTER TABLE reservas ADD COLUMN paquete_id INT NULL AFTER vuelo_id"))
@@ -1229,6 +1338,8 @@ def _opciones_carga_reserva():
         selectinload(Reserva.destino_rel).selectinload(Destino.pais),
         selectinload(Reserva.vuelo_rel),
         selectinload(Reserva.paquete_rel).selectinload(Paquete.excursiones),
+        selectinload(Reserva.hotel_rel),
+        selectinload(Reserva.excursiones),
         selectinload(Reserva.estado_rel),
         selectinload(Reserva.estado_pago_rel),
         selectinload(Reserva.metodo_pago_rel),
@@ -1655,6 +1766,48 @@ async def eliminar_servicio(servicio_id: int, admin: Administrador, sesion: Sesi
     return {"mensaje": "Servicio eliminado."}
 
 
+
+@app.get("/api/catalogos/destinos/{destino_id}/opciones")
+async def opciones_de_destino(destino_id: int, sesion: SesionDep):
+    """Todo lo reservable para un destino, en una sola llamada.
+
+    El asistente de reserva necesita vuelos, hoteles y excursiones del destino
+    elegido. Antes el cliente tenia que pedir los tres catalogos completos y
+    filtrarlos a mano, sin forma fiable de saber cuales correspondian al viaje.
+    """
+    destino = await sesion.get(Destino, destino_id, options=[selectinload(Destino.pais)])
+    if destino is None or not destino.activo:
+        raise RecursoNoEncontrado("un destino", destino_id)
+
+    ciudad = _ciudad_del_destino(destino)
+    pais = _normalizar_texto(destino.pais.nombre) if destino.pais else ""
+
+    vuelos = (await sesion.scalars(
+        select(Vuelo).where(Vuelo.activo.is_(True)).order_by(Vuelo.fecha_salida.asc())
+    )).all()
+    vuelos_destino = [v for v in vuelos if _normalizar_texto(v.destino) == ciudad]
+
+    hoteles = (await sesion.scalars(
+        select(Hotel).where(Hotel.activo.is_(True)).order_by(Hotel.estrellas.desc(), Hotel.nombre.asc())
+    )).all()
+    excursiones = (await sesion.scalars(
+        select(Excursion).where(Excursion.activo.is_(True)).order_by(Excursion.nombre.asc())
+    )).all()
+
+    return {
+        "destino": {
+            "id": destino.id,
+            "nombre": destino.nombre,
+            "pais": destino.pais.nombre if destino.pais else "",
+            "precioBase": float(destino.precio_base or 0),
+            "imagenSlug": destino.imagen_slug,
+            "descripcion": destino.descripcion,
+        },
+        "vuelos": [_vuelo_a_dict(v) for v in vuelos_destino],
+        "hoteles": [_hotel_a_dict(h) for h in hoteles if _normalizar_texto(h.ciudad) == ciudad and (not pais or _normalizar_texto(h.pais) == pais)],
+        "excursiones": [_excursion_a_dict(e) for e in excursiones if _normalizar_texto(e.ciudad) == ciudad and (not pais or _normalizar_texto(e.pais) == pais)],
+    }
+
 @app.get("/api/vuelos")
 async def listar_vuelos(usuario: UsuarioActual, sesion: SesionDep):
     vuelos = await sesion.scalars(select(Vuelo).order_by(Vuelo.fecha_salida.asc()))
@@ -1917,11 +2070,90 @@ async def eliminar_paquete(paquete_id: int, admin: Administrador, sesion: Sesion
     return {"mensaje": "Paquete desactivado."}
 
 
+def _ciudad_del_destino(destino: Destino) -> str:
+    """Los destinos se nombran "Ciudad, Pais"; devuelve solo la ciudad."""
+    return _normalizar_texto(destino.nombre.split(",")[0])
+
+
+def _esta_en_el_destino(ciudad: str, pais: str, destino: Destino) -> bool:
+    """Comprueba que un hotel o excursion pertenezca al destino del viaje."""
+    pais_destino = _normalizar_texto(destino.pais.nombre) if destino.pais else ""
+    if pais_destino and _normalizar_texto(pais) != pais_destino:
+        return False
+    return _normalizar_texto(ciudad) == _ciudad_del_destino(destino)
+
+
+async def _resolver_hotel_reserva(sesion: SesionDep, hotel_id: int | None, destino: Destino) -> Hotel | None:
+    if hotel_id is None:
+        return None
+    hotel = await sesion.get(Hotel, hotel_id)
+    if hotel is None or not hotel.activo:
+        raise ErrorDeDominio("El hotel seleccionado no está disponible.")
+    # Sin esto se podia reservar un hotel de Santorini para un viaje a Cartagena.
+    if not _esta_en_el_destino(hotel.ciudad, hotel.pais, destino):
+        raise ErrorDeDominio(f"El hotel {hotel.nombre} no está en {destino.nombre}.")
+    return hotel
+
+
+async def _resolver_excursiones_reserva(sesion: SesionDep, ids: list[int], destino: Destino) -> list[Excursion]:
+    if not ids:
+        return []
+    encontradas = (await sesion.scalars(select(Excursion).where(Excursion.id.in_(ids), Excursion.activo.is_(True)))).all()
+    if len(encontradas) != len(ids):
+        raise ErrorDeDominio("Alguna de las excursiones seleccionadas no está disponible.")
+    for excursion in encontradas:
+        if not _esta_en_el_destino(excursion.ciudad, excursion.pais, destino):
+            raise ErrorDeDominio(f"La excursión {excursion.nombre} no está en {destino.nombre}.")
+    return list(encontradas)
+
+
+async def _verificar_aforo_vuelo(sesion: SesionDep, vuelo: Vuelo, pasajeros: int) -> None:
+    """Impide vender mas plazas de las que tiene el avion."""
+    ocupadas = await sesion.scalar(
+        select(func.coalesce(func.sum(Reserva.pasajeros), 0))
+        .join(EstadoReserva, Reserva.estado_id == EstadoReserva.id)
+        .where(Reserva.vuelo_id == vuelo.id, EstadoReserva.codigo != "cancelada")
+    ) or 0
+    disponibles = (vuelo.capacidad_maxima or 0) - int(ocupadas)
+    if pasajeros > disponibles:
+        raise ConflictoDeNegocio(
+            f"El vuelo {vuelo.numero_vuelo} solo tiene {max(0, disponibles)} plazas disponibles."
+        )
+
+
+def _lineas_de_venta(destino: Destino, hotel: Hotel | None, excursiones: list[Excursion], desglose: DesgloseReserva, pasajeros: int, noches: int) -> list[dict]:
+    """Una linea por concepto, para que la factura deje de ser un unico total opaco."""
+    lineas: list[dict] = [{
+        "nombre": f"Vuelo y traslados - {destino.nombre}",
+        "cantidad": pasajeros,
+        "precio_unitario": (desglose.vuelo / Decimal(str(pasajeros))).quantize(Decimal("0.01")),
+        "subtotal": desglose.vuelo,
+    }]
+    if hotel is not None and desglose.hotel > 0:
+        habitaciones = _habitaciones_para(pasajeros)
+        unidades = noches * habitaciones
+        lineas.append({
+            "nombre": f"Hotel {hotel.nombre} ({hotel.estrellas}*) - {noches} noche(s) x {habitaciones} habitacion(es)",
+            "cantidad": unidades,
+            "precio_unitario": (desglose.hotel / Decimal(str(unidades))).quantize(Decimal("0.01")),
+            "subtotal": desglose.hotel,
+        })
+    for excursion in excursiones:
+        subtotal = (Decimal(excursion.precio or 0) * Decimal(str(pasajeros))).quantize(Decimal("0.01"))
+        lineas.append({
+            "nombre": f"Excursión {excursion.nombre} ({excursion.duracion_horas}h)",
+            "cantidad": pasajeros,
+            "precio_unitario": Decimal(excursion.precio or 0).quantize(Decimal("0.01")),
+            "subtotal": subtotal,
+        })
+    return lineas
+
+
 @app.post("/api/reservas", status_code=status.HTTP_201_CREATED)
-async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: SesionDep):
-    if payload.fechaRegreso < payload.fechaSalida:
-        raise ErrorDeDominio("La fecha de regreso debe ser posterior a la fecha de salida.")
+async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: SesionDep, tareas: BackgroundTasks):
     paquete = None
+    hotel: Hotel | None = None
+    excursiones: list[Excursion] = []
     if payload.paqueteId is not None:
         paquete = await sesion.get(Paquete, payload.paqueteId, options=[selectinload(Paquete.destino_rel), selectinload(Paquete.vuelo_rel)])
         if paquete is None or not paquete.activo:
@@ -1932,14 +2164,35 @@ async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: 
         vuelo = await _resolver_vuelo_reserva(sesion, payload, destino)
         if vuelo.id != paquete.vuelo_id:
             raise ErrorDeDominio("El vuelo del paquete ya no está disponible.")
+        # El paquete ya trae hotel y excursiones: se copian a la reserva para
+        # que la factura los detalle igual que en una reserva a la carta.
+        hotel = paquete.hotel_rel
+        excursiones = list(paquete.excursiones)
     else:
         destino = await _resolver_destino(sesion, payload.destino, payload.destinoId)
         vuelo = await _resolver_vuelo_reserva(sesion, payload, destino)
+        hotel = await _resolver_hotel_reserva(sesion, payload.hotelId, destino)
+        excursiones = await _resolver_excursiones_reserva(sesion, payload.excursionIds, destino)
+
+    await _verificar_aforo_vuelo(sesion, vuelo, payload.pasajeros)
+
+    noches = _noches_de_viaje(payload.fechaSalida, payload.fechaRegreso)
+    if paquete is not None:
+        # El precio del paquete manda: es una oferta cerrada.
+        desglose = DesgloseReserva(
+            vuelo=(Decimal(paquete.precio_base or 0) * Decimal(str(payload.pasajeros))).quantize(Decimal("0.01")),
+            hotel=Decimal("0"),
+            excursiones=Decimal("0"),
+        )
+    else:
+        desglose = _calcular_desglose_reserva(destino, hotel, excursiones, payload.fechaSalida, payload.fechaRegreso, payload.pasajeros)
     reserva = Reserva(
         usuario_id=usuario.id,
         destino_id=destino.id,
         vuelo_id=vuelo.id,
         paquete_id=paquete.id if paquete else None,
+        hotel_id=hotel.id if hotel else None,
+        excursiones=excursiones,
         fecha_salida=payload.fechaSalida,
         fecha_regreso=payload.fechaRegreso,
         pasajeros=payload.pasajeros,
@@ -1947,12 +2200,15 @@ async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: 
         notas=payload.notas,
         estado_id=await _resolver_estado_reserva_id(sesion, "pendiente"),
         estado_pago_id=await _resolver_estado_pago_id(sesion, "pendiente"),
-        monto_total=(paquete.precio_base * payload.pasajeros if paquete else _calcular_monto_reserva(destino, payload.fechaSalida, payload.fechaRegreso, payload.pasajeros)),
+        monto_total=desglose.total,
+        monto_vuelo=desglose.vuelo,
+        monto_hotel=desglose.hotel,
+        monto_excursiones=desglose.excursiones,
     )
     sesion.add(reserva)
-    await sesion.commit()
-    monto_reserva = Decimal(str(reserva.monto_total or 0))
-    precio_pasajero = (monto_reserva / payload.pasajeros).quantize(Decimal("0.01"))
+    await sesion.flush()
+    monto_reserva = desglose.total
+    lineas = _lineas_de_venta(destino, hotel, excursiones, desglose, payload.pasajeros, noches)
     venta = Venta(
         cliente_id=usuario.id,
         usuario_id=usuario.id,
@@ -1961,12 +2217,7 @@ async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: 
         impuestos=Decimal("0"),
         total=monto_reserva,
         estado="pendiente",
-        detalles=[DetalleVenta(
-            nombre=f"Reserva de viaje - {destino.nombre}",
-            cantidad=payload.pasajeros,
-            precio_unitario=precio_pasajero,
-            subtotal=monto_reserva,
-        )],
+        detalles=[DetalleVenta(**linea) for linea in lineas],
     )
     sesion.add(venta)
     await sesion.flush()
@@ -1974,13 +2225,10 @@ async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: 
         venta_id=venta.id,
         numero=f"AUR-{datetime.now(timezone.utc):%Y%m%d}-{venta.id:06d}",
         estado="emitida",
-        detalles=[DetalleFactura(
-            nombre=f"Reserva de viaje - {destino.nombre}",
-            cantidad=payload.pasajeros,
-            precio_unitario=precio_pasajero,
-            subtotal=monto_reserva,
-        )],
+        detalles=[DetalleFactura(**linea) for linea in lineas],
     ))
+    # Un unico commit: antes la reserva se confirmaba por separado y podia
+    # quedar sin venta ni factura si algo fallaba despues.
     await sesion.commit()
     reserva_dict = {
         "destino": destino.nombre,
@@ -1989,15 +2237,21 @@ async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: 
         "pasajeros": payload.pasajeros,
         "montoTotal": float(reserva.monto_total or 0),
         "estado": "pendiente",
+        "hotel": hotel.nombre if hotel else None,
+        "excursiones": [excursion.nombre for excursion in excursiones],
     }
-    correo_enviado = await enviar_correo_reserva(
-        usuario.correo,
-        f"{usuario.nombre} {usuario.apellido}",
-        reserva_dict,
-    )
-    if not correo_enviado:
-        logger.warning("Reserva %s creada, pero no se pudo enviar el correo a %s.", reserva.id, usuario.correo)
-    return {"id": reserva.id, "mensaje": "Solicitud registrada. Recibirás la confirmación en tu correo."}
+    # El correo no debe hacer esperar al cliente ni tumbar la reserva si SMTP falla.
+    tareas.add_task(enviar_correo_reserva, usuario.correo, f"{usuario.nombre} {usuario.apellido}", reserva_dict)
+    return {
+        "id": reserva.id,
+        "mensaje": "Solicitud registrada. Recibirás la confirmación en tu correo.",
+        "montoTotal": float(monto_reserva),
+        "desglose": {
+            "vuelo": float(desglose.vuelo),
+            "hotel": float(desglose.hotel),
+            "excursiones": float(desglose.excursiones),
+        },
+    }
 
 
 @app.get("/api/reservas")
