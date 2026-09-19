@@ -24,14 +24,14 @@ function Modal({ abierto, alCerrar, titulo, children }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-primario-oscuro/60 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-primario-oscuro/50 px-4 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-titulo"
       onClick={alCerrar}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-superficie p-6 shadow-2xl sm:p-8"
+        className="vidrio-solido filo-aurora max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl p-6 sm:p-8"
         onClick={(evento) => evento.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -42,7 +42,7 @@ function Modal({ abierto, alCerrar, titulo, children }) {
             type="button"
             onClick={alCerrar}
             aria-label="Cerrar"
-            className="shrink-0 rounded-full p-1 text-texto-suave transition hover:bg-fondo hover:text-primario"
+            className="shrink-0 rounded-full border border-white/60 bg-white/50 p-1.5 text-texto-suave transition hover:bg-white hover:text-primario"
           >
             ✕
           </button>

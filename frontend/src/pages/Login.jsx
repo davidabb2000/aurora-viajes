@@ -71,16 +71,16 @@ function Login() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-14">
-      <div className="w-full max-w-md rounded-lg border border-borde bg-superficie p-7 shadow-[0_20px_40px_-24px_rgba(15,61,62,0.35)] sm:p-9">
-        <NavLink to="/" className="mb-6 flex items-center justify-center gap-2 font-display text-2xl font-bold text-primario no-underline">
-          <span className="text-acento">✦</span>
-          Aurora Viajes
+      <div className="vidrio filo-aurora w-full max-w-md rounded-3xl p-7 sm:p-9">
+        <NavLink to="/" className="mb-6 flex items-center justify-center gap-2 font-display text-2xl font-bold no-underline">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-acento-suave via-primario-suave to-brillo text-lg text-white shadow-md shadow-primario/25">✦</span>
+          <span className="titulo-aurora">Aurora Viajes</span>
         </NavLink>
-        <span className="mb-2 inline-block text-xs font-semibold uppercase tracking-widest text-primario-suave">
+        <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">
           Bienvenido de vuelta
         </span>
-        <h1 className="mb-6 font-display text-2xl font-bold text-primario sm:text-3xl">
-          {vista === "login" ? "Inicia sesión" : "Recuperar contraseña"}
+        <h1 className="mb-6 mt-3 font-display text-2xl font-bold sm:text-3xl">
+          <span className="titulo-aurora">{vista === "login" ? "Inicia sesión" : "Recuperar contraseña"}</span>
         </h1>
 
         {vista === "recuperar" ? (
@@ -140,7 +140,7 @@ function Login() {
                   type="checkbox"
                   checked={recordarme}
                   onChange={(evento) => setRecordarme(evento.target.checked)}
-                  className="h-4 w-4 rounded border-borde accent-primario"
+                  className="h-4 w-4 rounded border-white/70 accent-primario"
                 />
                 Recordarme
               </label>
@@ -156,7 +156,7 @@ function Login() {
             <Button type="submit" className="w-full">
               {cargando ? "Validando..." : "Iniciar sesión"}
             </Button>
-            {mensajeError && <p className="text-center text-sm text-red-700">{mensajeError}</p>}
+            {mensajeError && <p className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-center text-sm font-medium text-red-700 backdrop-blur-sm">{mensajeError}</p>}
 
             <p className="text-center text-sm text-texto-suave">
               ¿No tienes cuenta?{" "}

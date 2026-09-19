@@ -31,22 +31,22 @@ function Carousel({ items, autoPlayMs = 5000 }) {
 
   return (
     <section aria-roledescription="carrusel" aria-label="Destinos destacados">
-      <div className="relative h-[360px] overflow-hidden rounded-md bg-primario shadow-[0_20px_40px_-24px_rgba(15,61,62,0.35)] sm:h-[480px]">
+      <div className="vidrio relative h-[380px] overflow-hidden rounded-3xl p-1.5 sm:h-[500px]">
         {items.map((item, indice) => (
           <figure
             key={item.id}
-            className={`absolute inset-0 m-0 transition-opacity duration-700 ${
+            className={`absolute inset-1.5 m-0 overflow-hidden rounded-[1.4rem] transition-opacity duration-700 ${
               indice === indiceActual ? "opacity-100" : "pointer-events-none opacity-0"
             }`}
             aria-hidden={indice !== indiceActual}
           >
             <img src={item.imagen} alt={item.titulo} className="h-full w-full object-cover" />
-            <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0d1a18] via-[#0d1a18]/70 to-transparent px-5 pb-7 pt-10 text-[#f7f4ee] sm:px-10 sm:pb-8">
-              <span className="mb-2.5 inline-block rounded-full border border-acento/60 px-2.5 py-0.5 text-xs font-semibold tracking-widest text-acento">
+            <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#120c38] via-[#120c38]/75 to-transparent px-5 pb-7 pt-12 text-white sm:px-10 sm:pb-8">
+              <span className="mb-2.5 inline-block rounded-full border border-white/40 bg-white/15 px-3 py-1 text-xs font-semibold tracking-widest text-acento-suave backdrop-blur-sm">
                 {String(indiceActual + 1).padStart(2, "0")} / {String(totalItems).padStart(2, "0")}
               </span>
               <h3 className="font-display text-2xl font-bold sm:text-3xl">{item.titulo}</h3>
-              <p className="mt-1.5 max-w-[46ch] text-sm text-[#e7e2d4] sm:text-[0.95rem]">
+              <p className="mt-1.5 max-w-[46ch] text-sm text-white/80 sm:text-[0.95rem]">
                 {item.descripcion}
               </p>
             </figcaption>
@@ -57,7 +57,7 @@ function Carousel({ items, autoPlayMs = 5000 }) {
           type="button"
           onClick={irAAnterior}
           aria-label="Destino anterior"
-          className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-[#f7f4ee]/90 text-xl text-primario transition hover:bg-acento hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento sm:left-[18px] sm:h-11 sm:w-11 sm:text-2xl"
+          className="absolute left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/50 bg-white/25 text-xl text-white backdrop-blur-md transition hover:bg-white/90 hover:text-primario focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento sm:left-6 sm:h-12 sm:w-12 sm:text-2xl"
         >
           ‹
         </button>
@@ -65,7 +65,7 @@ function Carousel({ items, autoPlayMs = 5000 }) {
           type="button"
           onClick={irASiguiente}
           aria-label="Destino siguiente"
-          className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-[#f7f4ee]/90 text-xl text-primario transition hover:bg-acento hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento sm:right-[18px] sm:h-11 sm:w-11 sm:text-2xl"
+          className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/50 bg-white/25 text-xl text-white backdrop-blur-md transition hover:bg-white/90 hover:text-primario focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento sm:right-6 sm:h-12 sm:w-12 sm:text-2xl"
         >
           ›
         </button>
@@ -80,10 +80,10 @@ function Carousel({ items, autoPlayMs = 5000 }) {
             aria-selected={indice === indiceActual}
             aria-label={`Ir a ${item.titulo}`}
             onClick={() => irAIndice(indice)}
-            className={`h-2.5 w-2.5 rounded-full border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento ${
+            className={`h-2.5 rounded-full border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento ${
               indice === indiceActual
-                ? "scale-125 border-acento bg-acento"
-                : "border-primario-suave bg-transparent"
+                ? "w-8 border-transparent bg-gradient-to-r from-acento via-primario-suave to-brillo"
+                : "w-2.5 border-primario-suave/50 bg-white/50 hover:bg-white"
             }`}
           />
         ))}

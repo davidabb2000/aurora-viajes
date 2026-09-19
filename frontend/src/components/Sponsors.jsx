@@ -30,16 +30,16 @@ function LogoPatrocinador({ patrocinador }) {
 function Sponsors() {
   return (
     <section className="mt-16 sm:mt-20" aria-labelledby="patrocinadores-titulo">
-      <div className="mx-auto w-[92%] max-w-275 overflow-hidden rounded-md border border-borde bg-superficie shadow-[0_18px_45px_-30px_rgba(15,61,62,0.45)]">
+      <div className="vidrio filo-aurora mx-auto w-[92%] max-w-275 overflow-hidden rounded-3xl">
         <div className="flex items-center justify-center gap-4 px-5 pb-5 pt-7 sm:gap-6 sm:pt-8">
-          <span className="h-px w-10 bg-acento sm:w-16" aria-hidden="true" />
+          <span className="h-px w-10 bg-gradient-to-r from-transparent to-acento sm:w-16" aria-hidden="true" />
           <h2 id="patrocinadores-titulo" className="text-center text-xs font-semibold uppercase tracking-[0.28em] text-primario">
             Patrocinadores
           </h2>
-          <span className="h-px w-10 bg-acento sm:w-16" aria-hidden="true" />
+          <span className="h-px w-10 bg-gradient-to-l from-transparent to-brillo sm:w-16" aria-hidden="true" />
         </div>
 
-        <div className="relative flex overflow-hidden border-t border-borde/70 bg-fondo/55 py-2">
+        <div className="relative flex overflow-hidden border-t border-white/60 bg-white/30 py-2">
           <div className="flex w-max shrink-0 animate-desplazar-logos will-change-transform hover:[animation-play-state:paused]">
             {[...patrocinadores, ...patrocinadores].map((patrocinador, indice) => (
               <LogoPatrocinador key={`${patrocinador.archivo}-${indice}`} patrocinador={patrocinador} />

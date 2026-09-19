@@ -153,7 +153,7 @@ function RecoverPassword({ alVolver }) {
         <Button type="submit" className="w-full">
           {cargando ? "Actualizando..." : "Actualizar contraseña"}
         </Button>
-        {mensajeError && <p className="text-sm text-red-700">{mensajeError}</p>}
+        {mensajeError && <p className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm font-medium text-red-700 backdrop-blur-sm">{mensajeError}</p>}
 
         <Button type="button" variant="texto" onClick={alVolver} className="self-center">
           ← Regresar al inicio de sesión
@@ -184,7 +184,7 @@ function RecoverPassword({ alVolver }) {
       <Button type="submit" className="w-full">
         {cargando ? "Enviando..." : "Recuperar contraseña"}
       </Button>
-      {mensajeError && <p className="text-sm text-red-700">{mensajeError}</p>}
+      {mensajeError && <p className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm font-medium text-red-700 backdrop-blur-sm">{mensajeError}</p>}
 
       <Button type="button" variant="texto" onClick={alVolver} className="self-center">
         ← Regresar al inicio de sesión

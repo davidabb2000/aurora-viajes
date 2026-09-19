@@ -43,11 +43,11 @@ const fechaLocal = (fecha) => (fecha ? fecha.slice(0, 16) : "");
 function Paginacion({ pagina, totalPaginas, onCambiar }) {
   if (totalPaginas <= 1) return null;
   return (
-    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-borde pt-4 text-sm">
+    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/70 pt-4 text-sm">
       <span className="text-texto-suave">Página {pagina} de {totalPaginas}</span>
       <div className="flex gap-2">
-        <button type="button" disabled={pagina === 1} onClick={() => onCambiar(pagina - 1)} className="rounded border border-borde px-3 py-1.5 font-semibold text-primario disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
-        <button type="button" disabled={pagina === totalPaginas} onClick={() => onCambiar(pagina + 1)} className="rounded border border-borde px-3 py-1.5 font-semibold text-primario disabled:cursor-not-allowed disabled:opacity-40">Siguiente</button>
+        <button type="button" disabled={pagina === 1} onClick={() => onCambiar(pagina - 1)} className="vidrio rounded-xl text-primario transition hover:-translate-y-0.5 hover:bg-white/85 px-3 py-1.5 font-semibold disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+        <button type="button" disabled={pagina === totalPaginas} onClick={() => onCambiar(pagina + 1)} className="vidrio rounded-xl text-primario transition hover:-translate-y-0.5 hover:bg-white/85 px-3 py-1.5 font-semibold disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40">Siguiente</button>
       </div>
     </div>
   );
@@ -91,15 +91,15 @@ function VuelosPanel({ vuelos, esAdmin, onCrear, onActualizar, onEliminar }) {
       <span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
         Panel de vuelos
       </span>
-      <h1 className="mt-2 font-display text-4xl font-bold text-primario">
+      <h1 className="titulo-aurora mt-2 font-display text-4xl font-bold">
         Vuelos programados
       </h1>
-      <section className="mt-8 overflow-x-auto rounded-lg border border-borde bg-superficie p-6">
+      <section className="vidrio mt-8 overflow-x-auto rounded-3xl p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-2xl font-bold text-primario">Información de vuelos</h2>
           {esAdmin && <span className="text-sm text-texto-suave">Gestión exclusiva de administración</span>}
         </div>
-        <input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="Buscar por vuelo, aerolínea, origen o destino" className="mt-5 w-full rounded-md border border-borde bg-fondo px-3 py-2 text-sm" />
+        <input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="Buscar por vuelo, aerolínea, origen o destino" className="mt-5 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 text-sm" />
         {vuelos.length === 0 ? (
           <p className="mt-4 text-sm text-texto-suave">No hay vuelos registrados.</p>
         ) : vuelosVisibles.length === 0 ? (
@@ -107,7 +107,7 @@ function VuelosPanel({ vuelos, esAdmin, onCrear, onActualizar, onEliminar }) {
         ) : (
           <div className="mt-5 space-y-4">
             {vuelosVisibles.map((vuelo) => (
-              <article key={vuelo.id} className="rounded-md border border-borde p-5">
+              <article key={vuelo.id} className="vidrio-sutil rounded-2xl p-5">
                 <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Vuelo</p><p className="mt-1 font-semibold text-texto">{vuelo.numeroVuelo} · {vuelo.aerolinea}</p></div>
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Ruta</p><p className="mt-1 text-texto">{vuelo.origen} → {vuelo.destino}</p></div>
@@ -118,7 +118,7 @@ function VuelosPanel({ vuelos, esAdmin, onCrear, onActualizar, onEliminar }) {
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Puerta / terminal</p><p className="mt-1 text-texto">{vuelo.puerta || "-"} / {vuelo.terminal || "-"}</p></div>
                   <div><p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Estado</p><p className="mt-1 capitalize text-texto">{vuelo.estado}</p></div>
                 </div>
-                {esAdmin && <div className="mt-4 flex gap-3 border-t border-borde pt-4"><button type="button" onClick={() => setEditando({ ...vuelo, fechaSalida: fechaLocal(vuelo.fechaSalida), fechaLlegada: fechaLocal(vuelo.fechaLlegada) })} className="text-sm font-semibold text-primario">Modificar</button><button type="button" onClick={() => onEliminar(vuelo.id)} className="text-sm font-semibold text-red-700">Eliminar</button></div>}
+                {esAdmin && <div className="mt-4 flex gap-3 border-t border-white/70 pt-4"><button type="button" onClick={() => setEditando({ ...vuelo, fechaSalida: fechaLocal(vuelo.fechaSalida), fechaLlegada: fechaLocal(vuelo.fechaLlegada) })} className="text-sm font-semibold text-primario">Modificar</button><button type="button" onClick={() => onEliminar(vuelo.id)} className="text-sm font-semibold text-red-700">Eliminar</button></div>}
               </article>
             ))}
             <Paginacion pagina={pagina} totalPaginas={totalPaginas} onCambiar={setPagina} />
@@ -126,19 +126,19 @@ function VuelosPanel({ vuelos, esAdmin, onCrear, onActualizar, onEliminar }) {
         )}
       </section>
       {esAdmin && (
-        <form onSubmit={guardar} className="mt-8 rounded-lg border border-borde bg-superficie p-6">
+        <form onSubmit={guardar} className="vidrio mt-8 rounded-3xl p-6">
           <h2 className="font-display text-2xl font-bold text-primario">{editando ? "Modificar vuelo" : "Agregar vuelo"}</h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[["numeroVuelo", "Número de vuelo"], ["aerolinea", "Aerolínea"], ["avion", "Avión"], ["origen", "Origen"], ["destino", "Destino"], ["puerta", "Puerta"], ["terminal", "Terminal"]].map(([campo, etiqueta]) => (
-              <label key={campo} className="text-sm font-semibold text-texto">{etiqueta}<input required={!["puerta", "terminal"].includes(campo)} name={campo} value={(editando || nuevo)[campo]} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
+              <label key={campo} className="text-sm font-semibold text-texto">{etiqueta}<input required={!["puerta", "terminal"].includes(campo)} name={campo} value={(editando || nuevo)[campo]} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
             ))}
-            <label className="text-sm font-semibold text-texto">Salida<input required type="datetime-local" name="fechaSalida" value={(editando || nuevo).fechaSalida} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-            <label className="text-sm font-semibold text-texto">Llegada<input required type="datetime-local" name="fechaLlegada" value={(editando || nuevo).fechaLlegada} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-            <label className="text-sm font-semibold text-texto">Capacidad máxima<input required type="number" min="1" max="1000" name="capacidadMaxima" value={(editando || nuevo).capacidadMaxima} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-            <label className="text-sm font-semibold text-texto">Estado<select name="estado" value={(editando || nuevo).estado} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal"><option value="programado">Programado</option><option value="abordando">Abordando</option><option value="en_vuelo">En vuelo</option><option value="aterrizado">Aterrizado</option><option value="cancelado">Cancelado</option></select></label>
+            <label className="text-sm font-semibold text-texto">Salida<input required type="datetime-local" name="fechaSalida" value={(editando || nuevo).fechaSalida} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-semibold text-texto">Llegada<input required type="datetime-local" name="fechaLlegada" value={(editando || nuevo).fechaLlegada} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-semibold text-texto">Capacidad máxima<input required type="number" min="1" max="1000" name="capacidadMaxima" value={(editando || nuevo).capacidadMaxima} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+            <label className="text-sm font-semibold text-texto">Estado<select name="estado" value={(editando || nuevo).estado} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal"><option value="programado">Programado</option><option value="abordando">Abordando</option><option value="en_vuelo">En vuelo</option><option value="aterrizado">Aterrizado</option><option value="cancelado">Cancelado</option></select></label>
           </div>
           <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-texto"><input type="checkbox" name="activo" checked={(editando || nuevo).activo} onChange={(evento) => actualizarCampo(evento, editando ? setEditando : setNuevo)} /> Vuelo activo</label>
-          <div className="mt-5 flex gap-3"><button type="submit" className="rounded-md bg-primario px-5 py-2.5 font-semibold text-white">{editando ? "Guardar cambios" : "Crear vuelo"}</button>{editando && <button type="button" onClick={() => setEditando(null)} className="rounded-md border border-borde px-5 py-2.5 font-semibold text-primario">Cancelar</button>}</div>
+          <div className="mt-5 flex gap-3"><button type="submit" className="rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 px-5 py-2.5 font-semibold">{editando ? "Guardar cambios" : "Crear vuelo"}</button>{editando && <button type="button" onClick={() => setEditando(null)} className="vidrio rounded-xl text-primario transition hover:-translate-y-0.5 hover:bg-white/85 px-5 py-2.5 font-semibold">Cancelar</button>}</div>
         </form>
       )}
     </main>
@@ -183,27 +183,27 @@ function PaquetesPanel({ paquetes, destinos, vuelos, hoteles, excursiones, onCre
   return (
     <main className="mx-auto w-[92%] max-w-275 flex-1 py-12 sm:py-16">
       <span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">Catálogo administrable</span>
-      <h1 className="mt-2 font-display text-4xl font-bold text-primario">Reservas y experiencias</h1>
-      <section className="mt-8 rounded-lg border border-borde bg-superficie p-6">
+      <h1 className="titulo-aurora mt-2 font-display text-4xl font-bold">Reservas y experiencias</h1>
+      <section className="vidrio mt-8 rounded-3xl p-6">
         <h2 className="font-display text-2xl font-bold text-primario">Crear reserva publicada</h2>
         <p className="mt-2 text-sm text-texto-suave">Conecta un vuelo, hotel y excursiones en una sola opción para el usuario.</p>
         <form onSubmit={(evento) => enviar(evento, "paquete")} className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <input required placeholder="Nombre de la reserva" value={paquete.nombre} onChange={(evento) => setPaquete({ ...paquete, nombre: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" />
-          <select required value={paquete.destinoId} onChange={(evento) => { const destino = ubicaciones.find((item) => item.id === Number(evento.target.value)); setPaquete({ ...paquete, destinoId: evento.target.value, vuelo: { ...paquete.vuelo, destino: destino?.nombre || "" } }); }} className="rounded-md border border-borde bg-fondo px-3 py-2"><option value="">Destino</option>{ubicaciones.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select>
-          <div className="rounded-md border border-borde bg-fondo p-3 sm:col-span-2 lg:col-span-3"><p className="text-sm font-semibold text-texto">Configurar vuelo de esta reserva</p><p className="mt-1 text-xs text-texto-suave">El número, la puerta, la terminal y la capacidad se asignan automáticamente.</p><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><select required value={paquete.vuelo.aerolinea} onChange={(evento) => setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, aerolinea: evento.target.value } })} className="rounded-md border border-borde bg-white px-3 py-2"><option>Aurora Airlines</option><option>Avianca</option><option>LATAM</option><option>Copa Airlines</option><option>Iberia</option></select><select required value={paquete.vuelo.avion} onChange={(evento) => { const capacidades = { "Airbus A320": 180, "Airbus A330": 300, "Boeing 737": 189, "Boeing 787": 330, "Embraer E195": 132 }; setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, avion: evento.target.value, capacidadMaxima: capacidades[evento.target.value] } }); }} className="rounded-md border border-borde bg-white px-3 py-2"><option>Airbus A320</option><option>Airbus A330</option><option>Boeing 737</option><option>Boeing 787</option><option>Embraer E195</option></select><select required value={paquete.vuelo.origen} onChange={(evento) => actualizarRuta("origen", evento.target.value)} className="rounded-md border border-borde bg-white px-3 py-2"><option value="">Origen</option><option>Bogotá</option><option>Medellín</option><option>Cali</option><option>Cartagena</option><option>Barranquilla</option><option>Lima</option><option>Madrid</option></select><input readOnly placeholder="Destino seleccionado" value={paquete.vuelo.destino} className="rounded-md border border-borde bg-white px-3 py-2" /><select required value={paquete.vuelo.terminal} onChange={(evento) => setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, terminal: evento.target.value } })} className="rounded-md border border-borde bg-white px-3 py-2"><option value="">Terminal</option>{opcionesAeropuerto(paquete.vuelo.origen).terminales.map((item) => <option key={item}>{item}</option>)}</select><select required value={paquete.vuelo.puerta} onChange={(evento) => setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, puerta: evento.target.value } })} className="rounded-md border border-borde bg-white px-3 py-2"><option value="">Puerta</option>{opcionesAeropuerto(paquete.vuelo.origen).puertas.map((item) => <option key={item}>{item}</option>)}</select><input readOnly placeholder="Capacidad automática" value={`${paquete.vuelo.capacidadMaxima} pasajeros`} className="rounded-md border border-borde bg-white px-3 py-2" /><input required type="datetime-local" value={paquete.vuelo.fechaSalida} onChange={(evento) => setPaquete({ ...paquete, fechaSalida: evento.target.value.slice(0, 10), vuelo: { ...paquete.vuelo, fechaSalida: evento.target.value } })} className="rounded-md border border-borde bg-white px-3 py-2" /><input required type="datetime-local" value={paquete.vuelo.fechaLlegada} onChange={(evento) => setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, fechaLlegada: evento.target.value } })} className="rounded-md border border-borde bg-white px-3 py-2" /></div></div>
-          <div className="grid gap-3 rounded-md border border-borde bg-fondo p-3 sm:col-span-2"><select required value={paquete.hotelId} onChange={(evento) => setPaquete({ ...paquete, hotelId: evento.target.value })} className="rounded-md border border-borde bg-white px-3 py-2"><option value="">Hotel según destino</option>{hoteles.filter((item) => item.activo && coincideConDestino(item)).map((item) => <option key={item.id} value={item.id}>{item.nombre} · {item.ciudad}, {item.pais}</option>)}</select><div className="grid gap-3 sm:grid-cols-2"><input readOnly value={paquete.fechaSalida} placeholder="Entrada del hotel: fecha de ida" className="rounded-md border border-borde bg-white px-3 py-2" /><input readOnly value={paquete.fechaRegreso} placeholder="Salida del hotel: fecha de regreso" className="rounded-md border border-borde bg-white px-3 py-2" /></div></div>
-          <input required type="date" value={paquete.fechaSalida} onChange={(evento) => setPaquete({ ...paquete, fechaSalida: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" />
-          <input required type="date" value={paquete.fechaRegreso} onChange={(evento) => setPaquete({ ...paquete, fechaRegreso: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" />
-          <input required type="number" min="0" value={paquete.precioBase} onChange={(evento) => setPaquete({ ...paquete, precioBase: evento.target.value })} placeholder="Precio por pasajero" className="rounded-md border border-borde bg-fondo px-3 py-2" />
-          <select multiple value={paquete.excursionIds} onChange={(evento) => setPaquete({ ...paquete, excursionIds: [...evento.target.selectedOptions].map((option) => option.value) })} className="min-h-24 rounded-md border border-borde bg-fondo px-3 py-2"><option disabled>Excursiones según destino</option>{excursiones.filter((item) => item.activo && coincideConDestino(item)).map((item) => <option key={item.id} value={item.id}>{item.nombre} · {item.ciudad}, {item.pais}</option>)}</select>
-          <button type="submit" className="rounded-md bg-primario px-4 py-2 font-semibold text-white">Publicar reserva</button>
+          <input required placeholder="Nombre de la reserva" value={paquete.nombre} onChange={(evento) => setPaquete({ ...paquete, nombre: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" />
+          <select required value={paquete.destinoId} onChange={(evento) => { const destino = ubicaciones.find((item) => item.id === Number(evento.target.value)); setPaquete({ ...paquete, destinoId: evento.target.value, vuelo: { ...paquete.vuelo, destino: destino?.nombre || "" } }); }} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option value="">Destino</option>{ubicaciones.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select>
+          <div className="vidrio-sutil rounded-2xl p-3 sm:col-span-2 lg:col-span-3"><p className="text-sm font-semibold text-texto">Configurar vuelo de esta reserva</p><p className="mt-1 text-xs text-texto-suave">El número, la puerta, la terminal y la capacidad se asignan automáticamente.</p><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><select required value={paquete.vuelo.aerolinea} onChange={(evento) => setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, aerolinea: evento.target.value } })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option>Aurora Airlines</option><option>Avianca</option><option>LATAM</option><option>Copa Airlines</option><option>Iberia</option></select><select required value={paquete.vuelo.avion} onChange={(evento) => { const capacidades = { "Airbus A320": 180, "Airbus A330": 300, "Boeing 737": 189, "Boeing 787": 330, "Embraer E195": 132 }; setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, avion: evento.target.value, capacidadMaxima: capacidades[evento.target.value] } }); }} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option>Airbus A320</option><option>Airbus A330</option><option>Boeing 737</option><option>Boeing 787</option><option>Embraer E195</option></select><select required value={paquete.vuelo.origen} onChange={(evento) => actualizarRuta("origen", evento.target.value)} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option value="">Origen</option><option>Bogotá</option><option>Medellín</option><option>Cali</option><option>Cartagena</option><option>Barranquilla</option><option>Lima</option><option>Madrid</option></select><input readOnly placeholder="Destino seleccionado" value={paquete.vuelo.destino} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /><select required value={paquete.vuelo.terminal} onChange={(evento) => setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, terminal: evento.target.value } })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option value="">Terminal</option>{opcionesAeropuerto(paquete.vuelo.origen).terminales.map((item) => <option key={item}>{item}</option>)}</select><select required value={paquete.vuelo.puerta} onChange={(evento) => setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, puerta: evento.target.value } })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option value="">Puerta</option>{opcionesAeropuerto(paquete.vuelo.origen).puertas.map((item) => <option key={item}>{item}</option>)}</select><input readOnly placeholder="Capacidad automática" value={`${paquete.vuelo.capacidadMaxima} pasajeros`} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /><input required type="datetime-local" value={paquete.vuelo.fechaSalida} onChange={(evento) => setPaquete({ ...paquete, fechaSalida: evento.target.value.slice(0, 10), vuelo: { ...paquete.vuelo, fechaSalida: evento.target.value } })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /><input required type="datetime-local" value={paquete.vuelo.fechaLlegada} onChange={(evento) => setPaquete({ ...paquete, vuelo: { ...paquete.vuelo, fechaLlegada: evento.target.value } })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /></div></div>
+          <div className="vidrio-sutil grid gap-3 rounded-2xl p-3 sm:col-span-2"><select required value={paquete.hotelId} onChange={(evento) => setPaquete({ ...paquete, hotelId: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option value="">Hotel según destino</option>{hoteles.filter((item) => item.activo && coincideConDestino(item)).map((item) => <option key={item.id} value={item.id}>{item.nombre} · {item.ciudad}, {item.pais}</option>)}</select><div className="grid gap-3 sm:grid-cols-2"><input readOnly value={paquete.fechaSalida} placeholder="Entrada del hotel: fecha de ida" className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /><input readOnly value={paquete.fechaRegreso} placeholder="Salida del hotel: fecha de regreso" className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /></div></div>
+          <input required type="date" value={paquete.fechaSalida} onChange={(evento) => setPaquete({ ...paquete, fechaSalida: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" />
+          <input required type="date" value={paquete.fechaRegreso} onChange={(evento) => setPaquete({ ...paquete, fechaRegreso: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" />
+          <input required type="number" min="0" value={paquete.precioBase} onChange={(evento) => setPaquete({ ...paquete, precioBase: evento.target.value })} placeholder="Precio por pasajero" className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" />
+          <select multiple value={paquete.excursionIds} onChange={(evento) => setPaquete({ ...paquete, excursionIds: [...evento.target.selectedOptions].map((option) => option.value) })} className="min-h-24 rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option disabled>Excursiones según destino</option>{excursiones.filter((item) => item.activo && coincideConDestino(item)).map((item) => <option key={item.id} value={item.id}>{item.nombre} · {item.ciudad}, {item.pais}</option>)}</select>
+          <button type="submit" className="rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 px-4 py-2 font-semibold">Publicar reserva</button>
         </form>
       </section>
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <form onSubmit={(evento) => enviar(evento, "hotel")} className="rounded-lg border border-borde bg-superficie p-6"><h2 className="font-display text-2xl font-bold text-primario">Agregar hotel</h2><div className="mt-4 grid gap-3"><input required placeholder="Nombre" value={hotel.nombre} onChange={(evento) => setHotel({ ...hotel, nombre: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" /><select required value={hotel.ubicacion} onChange={(evento) => setHotel({ ...hotel, ubicacion: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2"><option value="">Ubicación de la reserva</option>{ubicaciones.map((destino) => <option key={destino.id} value={destino.nombre}>{destino.nombre}</option>)}</select><input required type="number" min="1" max="5" placeholder="Estrellas (1 a 5)" value={hotel.estrellas} onChange={(evento) => setHotel({ ...hotel, estrellas: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" /><input required type="number" min="0" placeholder="Precio por noche" value={hotel.precioNoche} onChange={(evento) => setHotel({ ...hotel, precioNoche: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" /></div><button className="mt-4 rounded-md bg-primario px-4 py-2 font-semibold text-white">Guardar hotel</button></form>
-        <form onSubmit={(evento) => enviar(evento, "excursion")} className="rounded-lg border border-borde bg-superficie p-6"><h2 className="font-display text-2xl font-bold text-primario">Agregar excursión</h2><div className="mt-4 grid gap-3"><input required placeholder="Nombre" value={excursion.nombre} onChange={(evento) => setExcursion({ ...excursion, nombre: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" /><select required value={excursion.ubicacion} onChange={(evento) => setExcursion({ ...excursion, ubicacion: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2"><option value="">Ubicación de la reserva</option>{ubicaciones.map((destino) => <option key={destino.id} value={destino.nombre}>{destino.nombre}</option>)}</select><input required type="number" min="1" max="48" placeholder="Duración en horas (1 a 48)" value={excursion.duracionHoras} onChange={(evento) => setExcursion({ ...excursion, duracionHoras: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" /><input required type="number" min="0" placeholder="Precio" value={excursion.precio} onChange={(evento) => setExcursion({ ...excursion, precio: evento.target.value })} className="rounded-md border border-borde bg-fondo px-3 py-2" /></div><button className="mt-4 rounded-md bg-primario px-4 py-2 font-semibold text-white">Guardar excursión</button></form>
+        <form onSubmit={(evento) => enviar(evento, "hotel")} className="vidrio rounded-3xl p-6"><h2 className="font-display text-2xl font-bold text-primario">Agregar hotel</h2><div className="mt-4 grid gap-3"><input required placeholder="Nombre" value={hotel.nombre} onChange={(evento) => setHotel({ ...hotel, nombre: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /><select required value={hotel.ubicacion} onChange={(evento) => setHotel({ ...hotel, ubicacion: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option value="">Ubicación de la reserva</option>{ubicaciones.map((destino) => <option key={destino.id} value={destino.nombre}>{destino.nombre}</option>)}</select><input required type="number" min="1" max="5" placeholder="Estrellas (1 a 5)" value={hotel.estrellas} onChange={(evento) => setHotel({ ...hotel, estrellas: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /><input required type="number" min="0" placeholder="Precio por noche" value={hotel.precioNoche} onChange={(evento) => setHotel({ ...hotel, precioNoche: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /></div><button className="mt-4 rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 px-4 py-2 font-semibold">Guardar hotel</button></form>
+        <form onSubmit={(evento) => enviar(evento, "excursion")} className="vidrio rounded-3xl p-6"><h2 className="font-display text-2xl font-bold text-primario">Agregar excursión</h2><div className="mt-4 grid gap-3"><input required placeholder="Nombre" value={excursion.nombre} onChange={(evento) => setExcursion({ ...excursion, nombre: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /><select required value={excursion.ubicacion} onChange={(evento) => setExcursion({ ...excursion, ubicacion: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2"><option value="">Ubicación de la reserva</option>{ubicaciones.map((destino) => <option key={destino.id} value={destino.nombre}>{destino.nombre}</option>)}</select><input required type="number" min="1" max="48" placeholder="Duración en horas (1 a 48)" value={excursion.duracionHoras} onChange={(evento) => setExcursion({ ...excursion, duracionHoras: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /><input required type="number" min="0" placeholder="Precio" value={excursion.precio} onChange={(evento) => setExcursion({ ...excursion, precio: evento.target.value })} className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2" /></div><button className="mt-4 rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 px-4 py-2 font-semibold">Guardar excursión</button></form>
       </div>
-      <section className="mt-8 rounded-lg border border-borde bg-superficie p-6"><h2 className="font-display text-2xl font-bold text-primario">Reservas publicadas</h2><div className="mt-5 space-y-3">{paquetes.map((item) => <article key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-borde p-4"><div><p className="font-semibold text-texto">{item.nombre}</p><p className="text-sm text-texto-suave">{item.destino} · {item.vuelo?.numeroVuelo} · {item.hotel?.nombre}</p><p className="text-sm text-texto-suave">{item.excursiones.length} excursión(es) · ${Number(item.precioBase).toLocaleString("es-CO")} por pasajero</p></div><button type="button" onClick={() => onEliminarPaquete(item.id)} className="text-sm font-semibold text-red-700">Desactivar</button></article>)}</div></section>
+      <section className="vidrio mt-8 rounded-3xl p-6"><h2 className="font-display text-2xl font-bold text-primario">Reservas publicadas</h2><div className="mt-5 space-y-3">{paquetes.map((item) => <article key={item.id} className="vidrio-sutil flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4"><div><p className="font-semibold text-texto">{item.nombre}</p><p className="text-sm text-texto-suave">{item.destino} · {item.vuelo?.numeroVuelo} · {item.hotel?.nombre}</p><p className="text-sm text-texto-suave">{item.excursiones.length} excursión(es) · ${Number(item.precioBase).toLocaleString("es-CO")} por pasajero</p></div><button type="button" onClick={() => onEliminarPaquete(item.id)} className="text-sm font-semibold text-red-700">Desactivar</button></article>)}</div></section>
     </main>
   );
 }
@@ -279,15 +279,18 @@ function Panel() {
 
   useEffect(() => setPaginaReservas(1), [busquedaReservas]);
 
-  if (!sesion) return <Navigate to="/login" replace />;
-  const headers = { Authorization: `Bearer ${sesion.token}` };
-  const esAdmin = sesion.usuario.rol === "administrador";
-  const esPersonal = esAdmin || sesion.usuario.rol === "empleado";
-
+  // Este efecto iba despues del return de abajo. Al cerrar sesion el
+  // componente renderizaba menos hooks que en el render anterior y React
+  // rompia el panel entero; los hooks tienen que ir siempre antes del corte.
   useEffect(() => {
     const vistaSolicitada = parametros.get("vista");
     if (vistaSolicitada) setVista(vistaSolicitada);
   }, [parametros]);
+
+  if (!sesion) return <Navigate to="/login" replace />;
+  const headers = { Authorization: `Bearer ${sesion.token}` };
+  const esAdmin = sesion.usuario.rol === "administrador";
+  const esPersonal = esAdmin || sesion.usuario.rol === "empleado";
 
   const actualizarEstado = async (id, estado) => {
     try {
@@ -419,21 +422,21 @@ function Panel() {
         <span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
           Panel de {sesion.usuario.rol}
         </span>
-        <h1 className="mt-2 font-display text-4xl font-bold text-primario">
+        <h1 className="titulo-aurora mt-2 font-display text-4xl font-bold">
           Mensajes de contacto
         </h1>
         <button
           type="button"
           onClick={() => setVista("reservas")}
-          className="mt-6 cursor-pointer rounded-md bg-primario px-4 py-2 text-sm font-semibold text-white"
+          className="mt-6 cursor-pointer rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 px-4 py-2 text-sm font-semibold"
         >
           Volver al panel
         </button>
-        <section className="mt-8 overflow-x-auto rounded-lg border border-borde bg-superficie p-6">
+        <section className="vidrio mt-8 overflow-x-auto rounded-3xl p-6">
           {mensajesContacto.length ? (
             <table className="w-full min-w-175 text-left text-sm">
               <thead>
-                <tr className="border-b border-borde text-texto-suave">
+                <tr className="border-b border-white/70 text-texto-suave">
                   <th className="pb-3">Fecha</th>
                   <th className="pb-3">Nombre</th>
                   <th className="pb-3">Correo</th>
@@ -442,7 +445,7 @@ function Panel() {
               </thead>
               <tbody>
                 {mensajesContacto.map((item) => (
-                  <tr key={item.id} className="border-b border-borde align-top">
+                  <tr key={item.id} className="border-b border-white/70 align-top">
                     <td className="whitespace-nowrap py-3">
                       {new Date(item.creadoEn).toLocaleString("es-CO")}
                     </td>
@@ -470,7 +473,7 @@ function Panel() {
         <span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
           Panel de {sesion.usuario.rol}
         </span>
-        <h1 className="mt-2 font-display text-4xl font-bold text-primario">
+        <h1 className="titulo-aurora mt-2 font-display text-4xl font-bold">
           Hola, {sesion.usuario.nombre}
         </h1>
         <p className="mt-3 text-texto-suave">
@@ -483,11 +486,11 @@ function Panel() {
             Cargando información...
           </p>
         ) : (
-          <section className="mt-8 rounded-lg border border-borde bg-superficie p-6">
+          <section className="vidrio mt-8 rounded-3xl p-6">
             <h2 className="font-display text-2xl font-bold text-primario">
               {esPersonal ? "Solicitudes de viaje" : "Mis reservas"}
             </h2>
-            <input value={busquedaReservas} onChange={(evento) => setBusquedaReservas(evento.target.value)} placeholder="Buscar por cliente, destino, vuelo o estado" className="mt-5 w-full rounded-md border border-borde bg-fondo px-3 py-2 text-sm" />
+            <input value={busquedaReservas} onChange={(evento) => setBusquedaReservas(evento.target.value)} placeholder="Buscar por cliente, destino, vuelo o estado" className="mt-5 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 text-sm" />
             {reservas.length === 0 ? (
               <p className="mt-4 text-sm text-texto-suave">
                 Aún no hay solicitudes para mostrar.
@@ -501,7 +504,7 @@ function Panel() {
                 {reservasVisibles.map((reserva) => (
                   <article
                     key={reserva.id}
-                    className="rounded-md border border-borde p-5"
+                    className="vidrio-sutil rounded-2xl p-5"
                   >
                     <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
                       <div>
@@ -581,7 +584,7 @@ function Panel() {
                         </p>
                       </div>
                     </div>
-                    <details className="mt-5 rounded-md bg-fondo p-4">
+                    <details className="vidrio-sutil mt-5 rounded-2xl p-4">
                       <summary className="cursor-pointer font-semibold text-primario">
                         Ver información detallada del viaje
                       </summary>
@@ -624,7 +627,7 @@ function Panel() {
                         <div>
                           <h3 className="font-semibold text-primario">Excursiones</h3>
                           {reserva.paquete?.excursiones?.length ? (
-                            <ul className="mt-3 divide-y divide-borde">
+                            <ul className="mt-3 divide-y divide-white/70">
                               {reserva.paquete.excursiones.map((excursion) => (
                                 <li key={excursion.id} className="py-2 first:pt-0 last:pb-0">
                                   <strong className="text-texto">{excursion.nombre}</strong>
@@ -634,7 +637,7 @@ function Panel() {
                             </ul>
                           ) : <p className="mt-3 text-texto-suave">Sin excursiones asociadas.</p>}
                         </div>
-                        <div className="border-t border-borde pt-4 lg:col-span-2">
+                        <div className="border-t border-white/70 pt-4 lg:col-span-2">
                           <div className="grid gap-3 sm:grid-cols-3">
                             <p><span className="block text-texto-suave">Estado de reserva</span><strong className="capitalize text-texto">{reserva.estado || "pendiente"}</strong></p>
                             <p><span className="block text-texto-suave">Estado del pago</span><strong className="capitalize text-texto">{reserva.estadoPago || "pendiente"}</strong></p>
@@ -643,7 +646,7 @@ function Panel() {
                         </div>
                       </div>
                     </details>
-                    <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-borde pt-4">
+                    <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/70 pt-4">
                       {esPersonal && (
                         <label className="text-sm font-semibold text-texto">
                           Estado
@@ -652,7 +655,7 @@ function Panel() {
                             onChange={(evento) =>
                               actualizarEstado(reserva.id, evento.target.value)
                             }
-                            className="ml-2 cursor-pointer rounded border border-borde bg-fondo px-2 py-1 font-normal"
+                            className="ml-2 cursor-pointer rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-2 py-1 font-normal"
                           >
                             <option value="pendiente">Pendiente</option>
                             <option value="confirmada">Confirmada</option>
@@ -664,7 +667,7 @@ function Panel() {
                         <button
                           type="button"
                           onClick={() => eliminarReserva(reserva.id)}
-                          className="cursor-pointer rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"
+                          className="cursor-pointer rounded-xl border border-red-200 bg-red-50/70 px-3 py-2 text-sm font-semibold text-red-700 backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-red-100/80"
                         >
                           Eliminar solicitud
                         </button>
@@ -673,7 +676,7 @@ function Panel() {
                         <button
                           type="button"
                           onClick={() => window.location.assign(`/reservas/pago/${reserva.id}`)}
-                          className="cursor-pointer rounded-md bg-primario px-3 py-2 text-sm font-semibold text-white"
+                          className="cursor-pointer rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 px-3 py-2 text-sm font-semibold"
                         >
                           Ir al pago
                         </button>
@@ -682,22 +685,22 @@ function Panel() {
                         <button
                           type="button"
                           onClick={() => setReservaEditando({ ...reserva })}
-                          className="cursor-pointer rounded-md border border-borde px-3 py-2 text-sm font-semibold text-primario-suave"
+                          className="cursor-pointer vidrio rounded-xl text-primario transition hover:-translate-y-0.5 hover:bg-white/85 px-3 py-2 text-sm font-semibold"
                         >
                           Modificar solicitud
                         </button>
                       )}
                     </div>
                     {reservaEditando?.id === reserva.id && (
-                      <form onSubmit={modificarReserva} className="mt-5 grid gap-4 border-t border-borde pt-5 sm:grid-cols-2">
-                        <label className="text-sm font-semibold text-texto sm:col-span-2">Destino<input required name="destino" value={reservaEditando.destino} onChange={(evento) => setReservaEditando({ ...reservaEditando, destino: evento.target.value })} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-                        <label className="text-sm font-semibold text-texto sm:col-span-2">Vuelo<select required name="vueloId" value={reservaEditando.vueloId || ""} onChange={(evento) => { const vuelo = vuelos.find((item) => item.id === Number(evento.target.value)); setReservaEditando({ ...reservaEditando, vueloId: Number(evento.target.value), origen: vuelo?.origen || "" }); }} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal"><option value="">Selecciona un vuelo</option>{vuelos.map((vuelo) => <option key={vuelo.id} value={vuelo.id}>{vuelo.numeroVuelo} · {vuelo.origen} → {vuelo.destino} · {new Date(vuelo.fechaSalida).toLocaleString("es-CO")}</option>)}</select></label>
-                        <label className="text-sm font-semibold text-texto">Fecha de salida<input required type="date" name="fechaSalida" value={reservaEditando.fechaSalida} onChange={(evento) => setReservaEditando({ ...reservaEditando, fechaSalida: evento.target.value })} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-                        <label className="text-sm font-semibold text-texto">Fecha de regreso<input required type="date" name="fechaRegreso" value={reservaEditando.fechaRegreso} onChange={(evento) => setReservaEditando({ ...reservaEditando, fechaRegreso: evento.target.value })} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-                        <label className="text-sm font-semibold text-texto">Pasajeros<input required type="number" min="1" max="9" name="pasajeros" value={reservaEditando.pasajeros} onChange={(evento) => setReservaEditando({ ...reservaEditando, pasajeros: evento.target.value })} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-                        <label className="text-sm font-semibold text-texto">Teléfono de contacto<input required pattern="[0-9]{7,10}" maxLength="10" name="telefonoContacto" value={reservaEditando.telefonoContacto} onChange={(evento) => setReservaEditando({ ...reservaEditando, telefonoContacto: evento.target.value })} className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-                        <label className="text-sm font-semibold text-texto sm:col-span-2">Notas<textarea maxLength="300" name="notas" value={reservaEditando.notas || ""} onChange={(evento) => setReservaEditando({ ...reservaEditando, notas: evento.target.value })} rows="3" className="mt-2 w-full resize-y rounded-md border border-borde bg-fondo px-3 py-2 font-normal" /></label>
-                        <div className="flex gap-3 sm:col-span-2"><button type="submit" className="cursor-pointer rounded-md bg-primario px-4 py-2 text-sm font-semibold text-white">Guardar cambios</button><button type="button" onClick={() => setReservaEditando(null)} className="cursor-pointer rounded-md border border-borde px-4 py-2 text-sm font-semibold text-primario">Cancelar</button></div>
+                      <form onSubmit={modificarReserva} className="mt-5 grid gap-4 border-t border-white/70 pt-5 sm:grid-cols-2">
+                        <label className="text-sm font-semibold text-texto sm:col-span-2">Destino<input required name="destino" value={reservaEditando.destino} onChange={(evento) => setReservaEditando({ ...reservaEditando, destino: evento.target.value })} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+                        <label className="text-sm font-semibold text-texto sm:col-span-2">Vuelo<select required name="vueloId" value={reservaEditando.vueloId || ""} onChange={(evento) => { const vuelo = vuelos.find((item) => item.id === Number(evento.target.value)); setReservaEditando({ ...reservaEditando, vueloId: Number(evento.target.value), origen: vuelo?.origen || "" }); }} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal"><option value="">Selecciona un vuelo</option>{vuelos.map((vuelo) => <option key={vuelo.id} value={vuelo.id}>{vuelo.numeroVuelo} · {vuelo.origen} → {vuelo.destino} · {new Date(vuelo.fechaSalida).toLocaleString("es-CO")}</option>)}</select></label>
+                        <label className="text-sm font-semibold text-texto">Fecha de salida<input required type="date" name="fechaSalida" value={reservaEditando.fechaSalida} onChange={(evento) => setReservaEditando({ ...reservaEditando, fechaSalida: evento.target.value })} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+                        <label className="text-sm font-semibold text-texto">Fecha de regreso<input required type="date" name="fechaRegreso" value={reservaEditando.fechaRegreso} onChange={(evento) => setReservaEditando({ ...reservaEditando, fechaRegreso: evento.target.value })} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+                        <label className="text-sm font-semibold text-texto">Pasajeros<input required type="number" min="1" max="9" name="pasajeros" value={reservaEditando.pasajeros} onChange={(evento) => setReservaEditando({ ...reservaEditando, pasajeros: evento.target.value })} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+                        <label className="text-sm font-semibold text-texto">Teléfono de contacto<input required pattern="[0-9]{7,10}" maxLength="10" name="telefonoContacto" value={reservaEditando.telefonoContacto} onChange={(evento) => setReservaEditando({ ...reservaEditando, telefonoContacto: evento.target.value })} className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+                        <label className="text-sm font-semibold text-texto sm:col-span-2">Notas<textarea maxLength="300" name="notas" value={reservaEditando.notas || ""} onChange={(evento) => setReservaEditando({ ...reservaEditando, notas: evento.target.value })} rows="3" className="mt-2 w-full resize-y rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal" /></label>
+                        <div className="flex gap-3 sm:col-span-2"><button type="submit" className="cursor-pointer rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 px-4 py-2 text-sm font-semibold">Guardar cambios</button><button type="button" onClick={() => setReservaEditando(null)} className="cursor-pointer vidrio rounded-xl text-primario transition hover:-translate-y-0.5 hover:bg-white/85 px-4 py-2 text-sm font-semibold">Cancelar</button></div>
                       </form>
                     )}
                   </article>
@@ -716,7 +719,7 @@ function Panel() {
       <span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
         Panel de {sesion.usuario.rol}
       </span>
-      <h1 className="mt-2 font-display text-4xl font-bold text-primario">
+      <h1 className="titulo-aurora mt-2 font-display text-4xl font-bold">
         Hola, {sesion.usuario.nombre}
       </h1>
       <p className="mt-3 text-texto-suave">
@@ -725,13 +728,13 @@ function Panel() {
       {cargando ? (
         <p className="mt-8 text-sm text-texto-suave">Cargando información...</p>
       ) : vista === "usuarios" ? (
-        <section className="mt-8 overflow-x-auto rounded-lg border border-borde bg-superficie p-6">
+        <section className="vidrio mt-8 overflow-x-auto rounded-3xl p-6">
           <h2 className="font-display text-2xl font-bold text-primario">
             Usuarios registrados
           </h2>
           <table className="mt-5 w-full min-w-175 text-left text-sm">
             <thead>
-              <tr className="border-b border-borde text-texto-suave">
+              <tr className="border-b border-white/70 text-texto-suave">
                 <th className="pb-3">Nombre</th>
                 <th className="pb-3">Correo</th>
                 <th className="pb-3">Rol</th>
@@ -741,7 +744,7 @@ function Panel() {
             </thead>
             <tbody>
               {usuarios.map((usuario) => (
-                <tr key={usuario.id} className="border-b border-borde">
+                <tr key={usuario.id} className="border-b border-white/70">
                   <td className="py-3">
                     {usuario.nombre} {usuario.apellido}
                   </td>
@@ -772,7 +775,7 @@ function Panel() {
       ) : vista === "crear" ? (
         <form
           onSubmit={crearUsuario}
-          className="mt-8 max-w-2xl rounded-lg border border-borde bg-superficie p-6"
+          className="vidrio mt-8 max-w-2xl rounded-3xl p-6"
         >
           <h2 className="font-display text-2xl font-bold text-primario">
             Agregar usuario
@@ -805,7 +808,7 @@ function Panel() {
                       [campo]: evento.target.value,
                     })
                   }
-                  className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal outline-none focus:border-primario"
+                  className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal"
                 />
               </label>
             ))}
@@ -816,7 +819,7 @@ function Panel() {
                 onChange={(evento) =>
                   setNuevoUsuario({ ...nuevoUsuario, rol: evento.target.value })
                 }
-                className="mt-2 w-full rounded-md border border-borde bg-fondo px-3 py-2 font-normal"
+                className="mt-2 w-full rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-3 py-2 font-normal"
               >
                 <option>cliente</option>
                 <option>empleado</option>
@@ -826,13 +829,13 @@ function Panel() {
           </div>
           <button
             type="submit"
-            className="mt-5 rounded-md bg-primario px-5 py-2.5 font-semibold text-white"
+            className="mt-5 rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 px-5 py-2.5 font-semibold"
           >
             Crear usuario
           </button>
         </form>
       ) : (
-        <section className="mt-8 rounded-lg border border-borde bg-superficie p-6">
+        <section className="vidrio mt-8 rounded-3xl p-6">
           <h2 className="font-display text-2xl font-bold text-primario">
             {esPersonal ? "Solicitudes de viaje" : "Mis reservas"}
           </h2>
@@ -844,7 +847,7 @@ function Panel() {
             <div className="mt-5 overflow-x-auto">
               <table className="w-full min-w-175 text-left text-sm">
                 <thead>
-                  <tr className="border-b border-borde text-texto-suave">
+                  <tr className="border-b border-white/70 text-texto-suave">
                     <th className="pb-3">
                       {esPersonal ? "Cliente" : "Destino"}
                     </th>
@@ -861,7 +864,7 @@ function Panel() {
                 </thead>
                 <tbody>
                   {reservas.map((reserva) => (
-                    <tr key={reserva.id} className="border-b border-borde">
+                    <tr key={reserva.id} className="border-b border-white/70">
                       <td className="py-3">
                         {esPersonal ? reserva.cliente : reserva.destino}
                       </td>
@@ -897,7 +900,7 @@ function Panel() {
                             onChange={(evento) =>
                               actualizarEstado(reserva.id, evento.target.value)
                             }
-                            className="rounded border border-borde bg-fondo px-2 py-1"
+                            className="rounded-xl border border-white/70 bg-white/70 shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20 px-2 py-1"
                           >
                             <option>pendiente</option>
                             <option>confirmada</option>
@@ -914,18 +917,18 @@ function Panel() {
         </section>
       )}
       {reservaDetalle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primario-oscuro/70 p-4" role="presentation" onClick={() => setReservaDetalle(null)}>
-          <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-superficie p-6 shadow-xl sm:p-8" role="dialog" aria-modal="true" aria-labelledby="detalle-reserva-titulo" onClick={(evento) => evento.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4 border-b border-borde pb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primario-oscuro/50 p-4 backdrop-blur-md" role="presentation" onClick={() => setReservaDetalle(null)}>
+          <section className="vidrio-solido filo-aurora max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl p-6 sm:p-8" role="dialog" aria-modal="true" aria-labelledby="detalle-reserva-titulo" onClick={(evento) => evento.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 border-b border-white/70 pb-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-primario-suave">Reserva #{reservaDetalle.id}</p>
                 <h2 id="detalle-reserva-titulo" className="mt-1 font-display text-3xl font-bold text-primario">{reservaDetalle.paquete?.nombre || reservaDetalle.destino}</h2>
                 <p className="mt-1 text-sm text-texto-suave">{formatearUbicacion(reservaDetalle.destino, reservaDetalle.pais)}</p>
               </div>
-              <button type="button" onClick={() => setReservaDetalle(null)} aria-label="Cerrar detalle" className="rounded-md border border-borde px-3 py-1 text-xl text-primario">×</button>
+              <button type="button" onClick={() => setReservaDetalle(null)} aria-label="Cerrar detalle" className="vidrio rounded-xl text-primario transition hover:-translate-y-0.5 hover:bg-white/85 px-3 py-1 text-xl">×</button>
             </div>
             <div className="mt-5 grid gap-5 text-sm sm:grid-cols-2">
-              <div className="rounded-md bg-fondo p-4">
+              <div className="vidrio-sutil rounded-2xl p-4">
                 <h3 className="font-semibold text-primario">Viaje</h3>
                 <dl className="mt-3 grid gap-2">
                   <div><dt className="text-texto-suave">Fechas</dt><dd className="font-semibold text-texto">{reservaDetalle.fechaSalida} al {reservaDetalle.fechaRegreso}</dd></div>
@@ -934,20 +937,20 @@ function Panel() {
                   <div><dt className="text-texto-suave">Total</dt><dd className="font-semibold text-texto">${Number(reservaDetalle.montoTotal || 0).toLocaleString("es-CO")}</dd></div>
                 </dl>
               </div>
-              <div className="rounded-md bg-fondo p-4">
+              <div className="vidrio-sutil rounded-2xl p-4">
                 <h3 className="font-semibold text-primario">Vuelo</h3>
                 {reservaDetalle.vuelo ? <dl className="mt-3 grid gap-2"><div><dt className="text-texto-suave">Ruta</dt><dd className="font-semibold text-texto">{reservaDetalle.vuelo.origen} → {reservaDetalle.vuelo.destino}</dd></div><div><dt className="text-texto-suave">Vuelo y aerolínea</dt><dd className="font-semibold text-texto">{reservaDetalle.vuelo.numeroVuelo} · {reservaDetalle.vuelo.aerolinea}</dd></div><div><dt className="text-texto-suave">Horario</dt><dd className="font-semibold text-texto">{new Date(reservaDetalle.vuelo.fechaSalida).toLocaleString("es-CO")} a {new Date(reservaDetalle.vuelo.fechaLlegada).toLocaleString("es-CO")}</dd></div><div><dt className="text-texto-suave">Terminal / puerta</dt><dd className="font-semibold text-texto">{reservaDetalle.vuelo.terminal || "Sin definir"} / {reservaDetalle.vuelo.puerta || "Sin definir"}</dd></div></dl> : <p className="mt-3 text-texto-suave">Sin vuelo asignado.</p>}
               </div>
-              <div className="rounded-md border border-borde p-4">
+              <div className="vidrio-sutil rounded-2xl p-4">
                 <h3 className="font-semibold text-primario">Hotel</h3>
                 {reservaDetalle.paquete?.hotel ? <dl className="mt-3 grid gap-2"><div><dt className="text-texto-suave">Nombre</dt><dd className="font-semibold text-texto">{reservaDetalle.paquete.hotel.nombre}</dd></div><div><dt className="text-texto-suave">Ubicación</dt><dd className="font-semibold text-texto">{reservaDetalle.paquete.hotel.ciudad}, {reservaDetalle.paquete.hotel.pais}</dd></div><div><dt className="text-texto-suave">Categoría</dt><dd className="font-semibold text-texto">{reservaDetalle.paquete.hotel.estrellas} estrellas</dd></div></dl> : <p className="mt-3 text-texto-suave">Sin hotel asociado.</p>}
               </div>
-              <div className="rounded-md border border-borde p-4">
+              <div className="vidrio-sutil rounded-2xl p-4">
                 <h3 className="font-semibold text-primario">Excursiones</h3>
-                {reservaDetalle.paquete?.excursiones?.length ? <ul className="mt-3 divide-y divide-borde">{reservaDetalle.paquete.excursiones.map((excursion) => <li key={excursion.id} className="py-2 first:pt-0 last:pb-0"><strong className="text-texto">{excursion.nombre}</strong><span className="block text-texto-suave">{excursion.ciudad}, {excursion.pais} · {excursion.duracionHoras} horas</span></li>)}</ul> : <p className="mt-3 text-texto-suave">Sin excursiones asociadas.</p>}
+                {reservaDetalle.paquete?.excursiones?.length ? <ul className="mt-3 divide-y divide-white/70">{reservaDetalle.paquete.excursiones.map((excursion) => <li key={excursion.id} className="py-2 first:pt-0 last:pb-0"><strong className="text-texto">{excursion.nombre}</strong><span className="block text-texto-suave">{excursion.ciudad}, {excursion.pais} · {excursion.duracionHoras} horas</span></li>)}</ul> : <p className="mt-3 text-texto-suave">Sin excursiones asociadas.</p>}
               </div>
             </div>
-            <div className="mt-5 border-t border-borde pt-4 text-sm"><p><span className="text-texto-suave">Contacto: </span><strong>{reservaDetalle.telefonoContacto || "No registrado"}</strong></p><p className="mt-2"><span className="text-texto-suave">Pago: </span><strong className="capitalize">{reservaDetalle.estadoPago || "pendiente"}</strong>{reservaDetalle.metodoPago && ` · ${reservaDetalle.metodoPago}`}</p>{reservaDetalle.notas && <p className="mt-3 rounded-md bg-fondo p-3"><strong>Notas:</strong> {reservaDetalle.notas}</p>}</div>
+            <div className="mt-5 border-t border-white/70 pt-4 text-sm"><p><span className="text-texto-suave">Contacto: </span><strong>{reservaDetalle.telefonoContacto || "No registrado"}</strong></p><p className="mt-2"><span className="text-texto-suave">Pago: </span><strong className="capitalize">{reservaDetalle.estadoPago || "pendiente"}</strong>{reservaDetalle.metodoPago && ` · ${reservaDetalle.metodoPago}`}</p>{reservaDetalle.notas && <p className="vidrio-sutil mt-3 rounded-2xl p-3"><strong>Notas:</strong> {reservaDetalle.notas}</p>}</div>
           </section>
         </div>
       )}

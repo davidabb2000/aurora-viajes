@@ -262,7 +262,7 @@ function RegisterModal({ abierto, alCerrar }) {
             />
           </div>
 
-          <p className="text-xs leading-relaxed text-texto-suave">
+          <p className="vidrio-sutil rounded-xl px-4 py-3 text-xs leading-relaxed text-texto-suave">
             La contraseña debe tener entre 8 y 20 caracteres, con al menos una
             mayúscula, una minúscula, un número y un carácter especial.
           </p>
@@ -273,7 +273,7 @@ function RegisterModal({ abierto, alCerrar }) {
             </Button>
             <Button type="submit" disabled={cargando}>{cargando ? "Creando..." : "Crear cuenta"}</Button>
           </div>
-          {mensajeError && <p className="text-sm text-red-700">{mensajeError}</p>}
+          {mensajeError && <p className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm font-medium text-red-700 backdrop-blur-sm">{mensajeError}</p>}
         </form>
       )}
     </Modal>

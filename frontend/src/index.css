@@ -8,27 +8,55 @@
 @import "@fontsource/inter/600.css";
 
 @theme {
-  /* Paleta — Aurora Viajes */
-  --color-primario: #0f3d3e;
-  --color-primario-oscuro: #0b2c2d;
-  --color-primario-suave: #4c7c7a;
-  --color-acento: #c9a227;
-  --color-acento-suave: #e8c468;
-  --color-fondo: #f7f4ee;
+  /* Paleta "Aurora Boreal": indigo profundo, aqua y magenta sobre lavanda claro.
+     Las paginas usan estos tokens semanticos (primario, acento, superficie...),
+     asi que cambiarlos aqui reviste toda la aplicacion de forma coherente. */
+  --color-primario: #3f2fa8;
+  --color-primario-oscuro: #241a63;
+  --color-primario-suave: #6b5bd6;
+  --color-acento: #0e9e92;
+  --color-acento-suave: #6ee7dc;
+  --color-brillo: #d6336c;
+  --color-brillo-suave: #ff8fb6;
+  --color-fondo: #f2f1fd;
   --color-superficie: #ffffff;
-  --color-texto: #21201c;
-  --color-texto-suave: #55534a;
-  --color-borde: #e4ddcb;
+  --color-texto: #1a1733;
+  --color-texto-suave: #57527e;
+  --color-borde: #e0dbf7;
+
+  /* Capa de vidrio: translucidez, desenfoque y brillo del borde. */
+  --color-vidrio: rgba(255, 255, 255, 0.62);
+  --color-vidrio-fuerte: rgba(255, 255, 255, 0.82);
+  --color-vidrio-borde: rgba(255, 255, 255, 0.85);
+  --color-vidrio-noche: rgba(36, 26, 99, 0.55);
 
   --font-display: "Fraunces", "Georgia", serif;
   --font-cuerpo: "Inter", "Segoe UI", sans-serif;
+
+  --sombra-vidrio: 0 24px 60px -32px rgba(36, 26, 99, 0.55);
+  --sombra-vidrio-alta: 0 34px 80px -34px rgba(36, 26, 99, 0.6);
 }
 
 body {
-  background: var(--color-fondo);
+  background-color: var(--color-fondo);
   color: var(--color-texto);
   font-family: var(--font-cuerpo);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Halos de color fijos detras de todo: son los que el vidrio refracta.
+   Van en un pseudo-elemento para no interferir con el scroll de la pagina. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(52rem 42rem at 8% -6%, rgba(110, 231, 220, 0.5), transparent 62%),
+    radial-gradient(46rem 40rem at 96% 2%, rgba(214, 51, 108, 0.28), transparent 60%),
+    radial-gradient(60rem 48rem at 50% 108%, rgba(63, 47, 168, 0.35), transparent 62%),
+    radial-gradient(38rem 34rem at 82% 62%, rgba(14, 158, 146, 0.26), transparent 65%);
 }
 
 h1,
@@ -43,6 +71,76 @@ h3 {
   flex-direction: column;
 }
 
+@layer components {
+  /* Panel de vidrio estandar: lo usan tarjetas, formularios y secciones. */
+  .vidrio {
+    background: var(--color-vidrio);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    border: 1px solid var(--color-vidrio-borde);
+    box-shadow: var(--sombra-vidrio), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  }
+
+  /* Variante mas opaca para tablas y formularios largos, donde el texto manda. */
+  .vidrio-solido {
+    background: var(--color-vidrio-fuerte);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid var(--color-vidrio-borde);
+    box-shadow: var(--sombra-vidrio), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  /* Vidrio sobre fondos oscuros: cabecera del panel, pie de pagina, barra lateral. */
+  .vidrio-noche {
+    background: var(--color-vidrio-noche);
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: var(--sombra-vidrio), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+
+  /* Vidrio tenue para elementos anidados dentro de otro panel. */
+  .vidrio-sutil {
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+  }
+
+  /* Realce al pasar el cursor, para tarjetas que son enlaces o acciones. */
+  .vidrio-interactivo {
+    transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+  }
+
+  .vidrio-interactivo:hover {
+    transform: translateY(-3px);
+    background: var(--color-vidrio-fuerte);
+    box-shadow: var(--sombra-vidrio-alta), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  }
+
+  /* Titular con degradado de la aurora. */
+  .titulo-aurora {
+    background-image: linear-gradient(110deg, var(--color-primario-oscuro) 0%, var(--color-primario) 42%, var(--color-acento) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Borde superior de color que remata las tarjetas destacadas. */
+  .filo-aurora {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .filo-aurora::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--color-acento-suave), var(--color-primario-suave), var(--color-brillo-suave));
+  }
+}
+
 @keyframes desplazar-logos {
   from {
     transform: translateX(0);
@@ -53,8 +151,20 @@ h3 {
   }
 }
 
+@keyframes flotar-aurora {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(0, -14px, 0) scale(1.04);
+  }
+}
+
 @theme {
   --animate-desplazar-logos: desplazar-logos 75s linear infinite;
+  --animate-flotar-aurora: flotar-aurora 14s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -65,5 +175,9 @@ h3 {
 
   .animate-desplazar-logos {
     animation-duration: 75s !important;
+  }
+
+  .vidrio-interactivo:hover {
+    transform: none;
   }
 }

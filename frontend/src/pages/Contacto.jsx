@@ -36,13 +36,15 @@ function Contacto() {
   };
 
   return (
-    <div className="flex-1 py-12 sm:py-16">
+    <div className="flex-1 py-10 sm:py-14">
       <div className="mx-auto w-[92%] max-w-[560px]">
-        <span className="mb-3.5 inline-block text-xs font-semibold uppercase tracking-widest text-primario-suave">
+        <div className="vidrio filo-aurora rounded-3xl p-7 sm:p-9">
+        <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-acento" aria-hidden="true" />
           Hablemos
         </span>
-        <h1 className="mb-3.5 font-display text-3xl font-bold leading-tight text-primario sm:text-4xl">
-          Cuéntanos a dónde quieres ir
+        <h1 className="mb-3.5 mt-3.5 font-display text-3xl font-bold leading-tight sm:text-4xl">
+          <span className="titulo-aurora">Cuéntanos a dónde quieres ir</span>
         </h1>
         <p className="mb-8 text-texto-suave">
           Escríbenos y uno de nuestros asesores de viaje te contactará en menos
@@ -73,7 +75,7 @@ function Contacto() {
 
           <label className="flex flex-col gap-1.5 text-sm font-medium text-texto">
             <span>
-              Mensaje<span className="text-acento"> *</span>
+              Mensaje<span className="text-brillo"> *</span>
             </span>
             <textarea
               name="mensaje"
@@ -81,10 +83,10 @@ function Contacto() {
               onChange={manejarCambio}
               rows={5}
               placeholder="Cuéntanos qué destino tienes en mente"
-              className={`w-full resize-y rounded-md border bg-superficie px-3.5 py-2.5 text-[0.95rem] text-texto outline-none transition focus:ring-3 ${
+              className={`w-full resize-y rounded-xl border bg-white/70 px-3.5 py-2.5 text-[0.95rem] text-texto backdrop-blur-sm outline-none transition focus:bg-white/90 focus:ring-3 ${
                 errores.mensaje
                   ? "border-red-400 focus:border-red-400 focus:ring-red-100"
-                  : "border-borde focus:border-primario-suave focus:ring-primario-suave/15"
+                  : "border-white/70 shadow-sm shadow-primario/5 focus:border-primario-suave focus:ring-primario-suave/20"
               }`}
             />
             {errores.mensaje && (
@@ -97,12 +99,13 @@ function Contacto() {
           </Button>
 
           {enviado && (
-            <p role="status" className="text-sm font-medium text-primario-suave">
+            <p role="status" className="vidrio-sutil rounded-xl px-4 py-3 text-sm font-medium text-primario">
               ¡Gracias, {formulario.nombre || "viajero"}! Recibimos tu mensaje.
             </p>
           )}
-          {errorEnvio && <p role="alert" className="text-sm font-medium text-red-600">{errorEnvio}</p>}
+          {errorEnvio && <p role="alert" className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm font-medium text-red-700 backdrop-blur-sm">{errorEnvio}</p>}
         </form>
+        </div>
       </div>
     </div>
   );

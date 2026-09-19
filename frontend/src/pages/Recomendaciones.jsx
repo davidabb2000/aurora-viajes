@@ -47,20 +47,23 @@ function Recomendaciones() {
 
   return (
     <main className="mx-auto w-[92%] max-w-275 flex-1 py-12 sm:py-16">
-      <section className="max-w-2xl">
-        <span className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
-          IA de viajes
-        </span>
-        <h1 className="mt-2 font-display text-4xl font-bold text-primario sm:text-5xl">
-          Recomendaciones de destinos
-        </h1>
-        <p className="mt-4 text-lg leading-relaxed text-texto-suave">
-          Cuéntanos qué tipo de viaje quieres y te sugerimos destinos que encajan con tu estilo.
-        </p>
+      <section className="vidrio filo-aurora rounded-3xl p-7 sm:p-10">
+        <div className="max-w-2xl">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-brillo" aria-hidden="true" />
+            IA de viajes
+          </span>
+          <h1 className="mt-3 font-display text-4xl font-bold sm:text-5xl">
+            <span className="titulo-aurora">Recomendaciones de destinos</span>
+          </h1>
+          <p className="mt-4 text-lg leading-relaxed text-texto-suave">
+            Cuéntanos qué tipo de viaje quieres y te sugerimos destinos que encajan con tu estilo.
+          </p>
+        </div>
       </section>
 
       <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_1fr]">
-        <form onSubmit={manejarEnvio} className="rounded-lg border border-borde bg-superficie p-6 shadow-sm sm:p-8">
+        <form onSubmit={manejarEnvio} className="vidrio rounded-3xl p-6 sm:p-8">
           <h2 className="font-display text-2xl font-bold text-primario">Describe tu viaje ideal</h2>
           <div className="mt-6">
             <Input
@@ -76,31 +79,36 @@ function Recomendaciones() {
           <button
             type="submit"
             disabled={cargando || intereses.trim().length < 10}
-            className="mt-6 w-full rounded-md bg-primario px-5 py-3 text-sm font-semibold text-white transition hover:bg-primario-oscuro disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-6 w-full rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
           >
             {cargando ? "Buscando..." : "Obtener recomendaciones"}
           </button>
 
-          {error && <p className="mt-4 text-sm font-medium text-red-700">{error}</p>}
-          {aviso && <p className="mt-4 text-sm font-medium text-primario">{aviso}</p>}
+          {error && <p className="mt-4 rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm font-medium text-red-700 backdrop-blur-sm">{error}</p>}
+          {aviso && <p className="vidrio-sutil mt-4 rounded-xl px-4 py-3 text-sm font-medium text-primario">{aviso}</p>}
         </form>
 
-        <aside className="rounded-lg bg-primario p-7 text-white sm:p-8">
-          <span className="text-xs font-semibold uppercase tracking-widest text-acento-suave">
+        <aside className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primario-oscuro via-primario to-[#1b1350] p-7 text-white shadow-xl shadow-primario/30 sm:p-8">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-80"
+            style={{ background: "radial-gradient(24rem 18rem at 100% 0%, rgba(110,231,220,0.3), transparent 60%), radial-gradient(22rem 18rem at 0% 100%, rgba(214,51,108,0.32), transparent 62%)" }}
+          />
+          <span className="relative inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-acento-suave backdrop-blur-sm">
             Tu asesor virtual
           </span>
-          <h2 className="mt-4 font-display text-3xl font-bold">
+          <h2 className="relative mt-4 font-display text-3xl font-bold">
             Destinos pensados para lo que buscas
           </h2>
-          <p className="mt-5 leading-relaxed text-white/75">
+          <p className="relative mt-5 leading-relaxed text-white/75">
             El sistema mezcla IA con un catálogo local para darte opciones útiles incluso si el proveedor externo no responde.
           </p>
           {generadaPor && (
-            <p className="mt-5 text-sm text-white/80">
+            <p className="relative mt-5 text-sm text-white/80">
               Fuente: <strong className="text-white">{generadaPor}</strong>
             </p>
           )}
-          <p className="mt-4 text-sm text-white/70">
+          <p className="relative mt-4 text-sm text-white/70">
             Sesión activa como <strong className="text-white">{sesion.usuario.nombre}</strong>
           </p>
         </aside>
@@ -111,7 +119,7 @@ function Recomendaciones() {
           <h2 className="font-display text-2xl font-bold text-primario">Sugerencias para ti</h2>
           <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {recomendaciones.map((destino) => (
-              <article key={destino.destino_id} className="rounded-lg border border-borde bg-superficie p-5 shadow-sm">
+              <article key={destino.destino_id} className="vidrio vidrio-interactivo filo-aurora flex flex-col rounded-2xl p-5">
                 <p className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
                   {destino.pais}
                 </p>
@@ -121,6 +129,7 @@ function Recomendaciones() {
                 <p className="mt-3 text-sm leading-relaxed text-texto-suave">
                   {destino.motivo}
                 </p>
+                <div className="flex-1" />
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-sm text-texto">
                   {destino.region && (
                     <div>
@@ -154,7 +163,7 @@ function Recomendaciones() {
                 )}
                 <Link
                   to="/reservas"
-                  className="mt-5 inline-flex w-full items-center justify-center rounded-md border border-borde bg-transparent px-5 py-2.5 text-sm font-semibold text-primario transition hover:bg-fondo focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento"
+                  className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primario/25 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento"
                 >
                   Reservar este destino
                 </Link>
