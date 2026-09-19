@@ -29,3 +29,15 @@ class PermisoDenegado(ErrorDeDominio):
 
     def __init__(self, mensaje: str = "No tiene permiso para realizar esta operación."):
         super().__init__(mensaje)
+
+
+class DemasiadasPeticiones(ErrorDeDominio):
+    """El cliente supero el numero de intentos permitidos en la ventana."""
+
+    codigo = "demasiadas_peticiones"
+
+    def __init__(self, segundos_restantes: int):
+        self.segundos_restantes = segundos_restantes
+        super().__init__(
+            f"Demasiados intentos. Espera {segundos_restantes} segundos antes de volver a intentarlo."
+        )

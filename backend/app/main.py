@@ -20,10 +20,11 @@ from sqlalchemy.orm import selectinload
 
 from app.core.base_datos import Base, FabricaDeSesiones, motor
 from app.core.configuracion import configuracion
+from app.core.limitador import limitador, limitar, cliente_de
 from app.core.seguridad import crear_token, hashear_contrasena, verificar_contrasena
 from app.services.correos import enviar_correo_recuperacion, enviar_correo_bienvenida, enviar_correo_reserva
 from app.dependencias import Administrador, EmpleadoOAdmin, ReservaDeRuta, SesionDep, UsuarioActual, UsuarioDeRuta
-from app.errores import ConflictoDeNegocio, ErrorDeDominio, NoAutenticado, PermisoDenegado, RecursoNoEncontrado
+from app.errores import ConflictoDeNegocio, DemasiadasPeticiones, ErrorDeDominio, NoAutenticado, PermisoDenegado, RecursoNoEncontrado
 from app.middlewares import cabeceras_de_seguridad, registrar_peticion
 from app.models.biblioteca import (
     Destino,
@@ -132,7 +133,12 @@ class UserCreate(BaseModel):
     direccion: str = Field(..., min_length=5, max_length=80)
     telefono: str = Field(..., min_length=7, max_length=10)
     correo: str
-    contrasena: str = Field(..., min_length=8, max_length=20)
+    contrasena: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("contrasena")
+    @classmethod
+    def validar_robustez_contrasena(cls, value: str) -> str:
+        return _exigir_contrasena_robusta(value)
 
     @field_validator("nombre", "apellido")
     @classmethod
@@ -573,6 +579,18 @@ def _reserva_a_dict(reserva: Reserva) -> dict:
         "montoTotal": float(reserva.monto_total or 0),
         "stripeSessionId": reserva.stripe_session_id,
     }
+
+
+# Hash de una contrasena que nadie usa. Sirve para gastar el mismo tiempo de
+# verificacion cuando el correo no existe.
+_HASH_SENUELO = hashear_contrasena("contrasena-senuelo-sin-uso-real")
+
+
+def _exigir_contrasena_robusta(valor: str) -> str:
+    """Rechaza contrasenas triviales: pide mayuscula, minuscula y digito."""
+    if not any(c.islower() for c in valor) or not any(c.isupper() for c in valor) or not any(c.isdigit() for c in valor):
+        raise ValueError("La contrasena debe incluir mayuscula, minuscula y al menos un numero.")
+    return valor
 
 
 def _clausula_no_duplicados(sesion: SesionDep) -> str:
@@ -1273,6 +1291,13 @@ def manejar_conflicto(peticion: Request, exc: ConflictoDeNegocio):
     return _respuesta_error(peticion, status.HTTP_409_CONFLICT, exc.codigo, exc.mensaje)
 
 
+@app.exception_handler(DemasiadasPeticiones)
+def manejar_demasiadas_peticiones(peticion: Request, exc: DemasiadasPeticiones):
+    respuesta = _respuesta_error(peticion, status.HTTP_429_TOO_MANY_REQUESTS, exc.codigo, exc.mensaje)
+    respuesta.headers["Retry-After"] = str(exc.segundos_restantes)
+    return respuesta
+
+
 @app.exception_handler(ErrorDeDominio)
 def manejar_error_dominio(peticion: Request, exc: ErrorDeDominio):
     return _respuesta_error(peticion, status.HTTP_400_BAD_REQUEST, exc.codigo, exc.mensaje)
@@ -1323,24 +1348,72 @@ async def catalogo_destinos(sesion: SesionDep):
     ]
 
 
+class RecuperarContrasena(BaseModel):
+    correo: str
+
+    @field_validator("correo")
+    @classmethod
+    def validar_correo(cls, value: str) -> str:
+        return UserCreate.validar_correo(value)
+
+
+class RestablecerContrasena(BaseModel):
+    correo: str
+    token: str = Field(..., min_length=10, max_length=2000)
+    nuevaContrasena: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("correo")
+    @classmethod
+    def validar_correo(cls, value: str) -> str:
+        return UserCreate.validar_correo(value)
+
+    @field_validator("nuevaContrasena")
+    @classmethod
+    def validar_robustez(cls, value: str) -> str:
+        return _exigir_contrasena_robusta(value)
+
+
+class ConfirmacionDePago(BaseModel):
+    sessionId: str | None = Field(default=None, max_length=255)
+
+
+class EstadoDeReserva(BaseModel):
+    estado: str = Field(..., min_length=3, max_length=30)
+
+
 @app.post("/api/auth/login")
-async def login(payload: UserLogin, sesion: SesionDep):
+async def login(payload: UserLogin, peticion: Request, sesion: SesionDep):
+    # Dos ventanas: uNA por IP, para frenar el barrido de cuentas, y otra por
+    # correo, para que no se pueda machacar una cuenta concreta desde varias IP.
+    clave_ip = await limitar(peticion, "login-ip", maximo=10, ventana_segundos=300)
+    clave_correo = f"login-correo:{payload.correo.lower()}"
+    await limitador.registrar(clave_correo, maximo=5, ventana_segundos=300)
+
     usuario = await sesion.scalar(select(User).where(User.correo == payload.correo.lower()).options(selectinload(User.role)))
     try:
-        contrasena_valida = usuario is not None and usuario.activo and verificar_contrasena(payload.contrasena, usuario.contrasena_hash)
+        if usuario is None:
+            # Se verifica igualmente contra un hash de relleno para que la
+            # respuesta tarde lo mismo exista o no la cuenta; si no, el tiempo
+            # delata que correos estan registrados.
+            verificar_contrasena(payload.contrasena, _HASH_SENUELO)
+            contrasena_valida = False
+        else:
+            contrasena_valida = usuario.activo and verificar_contrasena(payload.contrasena, usuario.contrasena_hash)
     except Exception as exc:
         logger.warning("No se pudo verificar la contraseña de %s: %s", payload.correo.lower(), exc)
         raise NoAutenticado("Credenciales inválidas o usuario inactivo.") from exc
     if not contrasena_valida:
         raise NoAutenticado("Credenciales inválidas o usuario inactivo.")
+    await limitador.limpiar(clave_ip)
+    await limitador.limpiar(clave_correo)
     return {"token": crear_token(usuario.id, usuario.role.nombre if usuario.role else "cliente"), "usuario": _usuario_sesion_a_dict(usuario)}
 
 
 @app.post("/api/auth/recuperar")
-async def recuperar_contrasena(payload: dict, sesion: SesionDep):
-    correo = str(payload.get("correo", "")).strip().lower()
-    if not correo:
-        raise ErrorDeDominio("Ingresa un correo electrónico válido.")
+async def recuperar_contrasena(payload: RecuperarContrasena, peticion: Request, sesion: SesionDep):
+    # Sin limite, este endpoint es una ametralladora de correos hacia terceros.
+    await limitar(peticion, "recuperar", maximo=3, ventana_segundos=900)
+    correo = payload.correo.lower()
     usuario = await sesion.scalar(select(User).where(User.correo == correo).options(selectinload(User.role)))
     if usuario is None:
         return {"mensaje": "Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña."}
@@ -1355,14 +1428,11 @@ async def recuperar_contrasena(payload: dict, sesion: SesionDep):
 
 
 @app.post("/api/auth/restablecer")
-async def restablecer_contrasena(payload: dict, sesion: SesionDep):
-    correo = str(payload.get("correo", "")).strip().lower()
-    token = str(payload.get("token", "")).strip()
-    nueva_contrasena = str(payload.get("nuevaContrasena", "")).strip()
-    if not correo or not token or not nueva_contrasena:
-        raise ErrorDeDominio("Correo, token y nueva contraseña son obligatorios.")
-    if len(nueva_contrasena) < 8 or len(nueva_contrasena) > 20:
-        raise ErrorDeDominio("La contraseña debe tener entre 8 y 20 caracteres.")
+async def restablecer_contrasena(payload: RestablecerContrasena, peticion: Request, sesion: SesionDep):
+    await limitar(peticion, "restablecer", maximo=5, ventana_segundos=900)
+    correo = payload.correo.lower()
+    token = payload.token.strip()
+    nueva_contrasena = payload.nuevaContrasena
     try:
         decoded = jwt.decode(token, configuracion.secret_key, algorithms=[configuracion.algoritmo_jwt])
     except jwt.ExpiredSignatureError as exc:
@@ -1380,7 +1450,8 @@ async def restablecer_contrasena(payload: dict, sesion: SesionDep):
 
 
 @app.post("/api/usuarios/registro", status_code=status.HTTP_201_CREATED)
-async def registrar_usuario(payload: UserCreate, sesion: SesionDep):
+async def registrar_usuario(payload: UserCreate, peticion: Request, sesion: SesionDep):
+    await limitar(peticion, "registro", maximo=5, ventana_segundos=3600)
     existente = await sesion.scalar(select(User).where(or_(User.correo == payload.correo.lower(), User.numero_documento == payload.numeroDocumento)))
     if existente is not None:
         raise ConflictoDeNegocio("El correo o documento ya está registrado.")
@@ -1997,12 +2068,12 @@ async def crear_checkout(reserva: ReservaDeRuta, usuario: UsuarioActual, sesion:
 
 
 @app.post("/api/reservas/{reserva_id}/pago/confirmar")
-async def confirmar_pago(reserva: ReservaDeRuta, usuario: UsuarioActual, payload: dict | None, sesion: SesionDep):
+async def confirmar_pago(reserva: ReservaDeRuta, usuario: UsuarioActual, payload: ConfirmacionDePago | None, sesion: SesionDep):
     if usuario.role.nombre not in {"administrador", "empleado"} and reserva.usuario_id != usuario.id:
         raise PermisoDenegado("No tiene permiso para realizar esta operación.")
     session_id = ""
-    if payload:
-        session_id = str(payload.get("sessionId", "")).strip()
+    if payload and payload.sessionId:
+        session_id = payload.sessionId.strip()
     if not session_id:
         session_id = reserva.stripe_session_id or ""
     if not session_id:
@@ -2018,10 +2089,8 @@ async def confirmar_pago(reserva: ReservaDeRuta, usuario: UsuarioActual, payload
 
 
 @app.patch("/api/reservas/{reserva_id}/estado")
-async def actualizar_estado_reserva(reserva: ReservaDeRuta, payload: dict, personal: EmpleadoOAdmin, sesion: SesionDep):
-    nuevo_estado = str(payload.get("estado", "")).strip()
-    if not nuevo_estado:
-        raise ErrorDeDominio("El estado es obligatorio.")
+async def actualizar_estado_reserva(reserva: ReservaDeRuta, payload: EstadoDeReserva, personal: EmpleadoOAdmin, sesion: SesionDep):
+    nuevo_estado = payload.estado.strip()
     reserva.estado_id = await _resolver_estado_reserva_id(sesion, nuevo_estado)
     await sesion.commit()
     return {"mensaje": "Estado actualizado."}
@@ -2037,7 +2106,8 @@ async def eliminar_reserva(reserva: ReservaDeRuta, usuario: UsuarioActual, sesio
 
 
 @app.post("/api/contacto")
-async def crear_contacto(payload: ContactoCreate, sesion: SesionDep):
+async def crear_contacto(payload: ContactoCreate, peticion: Request, sesion: SesionDep):
+    await limitar(peticion, "contacto", maximo=5, ventana_segundos=3600)
     mensaje = MensajeContacto(nombre=payload.nombre, correo=payload.correo.lower(), mensaje=payload.mensaje)
     sesion.add(mensaje)
     await sesion.commit()

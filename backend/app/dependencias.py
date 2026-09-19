@@ -28,8 +28,17 @@ async def usuario_actual(
         raise NoAutenticado("El token expiró. Inicie sesión de nuevo.")
     except jwt.InvalidTokenError:
         raise NoAutenticado("El token no es válido.")
+    # Un token de recuperacion viaja en la URL del correo y solo debe servir
+    # para restablecer la contrasena; sin esta comprobacion abriria sesion
+    # completa en toda la API.
+    if carga.get("purpose", "login") != "login":
+        raise NoAutenticado("El token no habilita el acceso a la API.")
     usuario_id = carga.get("id") or carga.get("sub")
-    usuario = await sesion.get(User, int(usuario_id), options=[selectinload(User.role), selectinload(User.tipo_documento_catalogo)])
+    try:
+        usuario_id = int(usuario_id)
+    except (TypeError, ValueError):
+        raise NoAutenticado("El token no es válido.")
+    usuario = await sesion.get(User, usuario_id, options=[selectinload(User.role), selectinload(User.tipo_documento_catalogo)])
     if usuario is None or not usuario.activo:
         raise NoAutenticado("La cuenta no existe o está inactiva.")
     return usuario
