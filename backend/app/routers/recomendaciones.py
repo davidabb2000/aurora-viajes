@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.configuracion import configuracion
 from app.dependencias import SesionDep, UsuarioActual
 from app.errores import ErrorDeDominio
-from app.models.biblioteca import Destino
+from app.models.dominio import Destino
 from app.services.recomendaciones import (
     INSTRUCCION_DESTINOS,
     ProveedorNoDisponible,

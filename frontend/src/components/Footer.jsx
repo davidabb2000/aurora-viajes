@@ -1,74 +1,86 @@
 import { Link } from "react-router-dom";
-import GoogleMap from "./GoogleMap";
+import Revelar from "./Revelar";
 
 function Footer() {
   const anioActual = new Date().getFullYear();
 
   return (
-    <footer className="relative mt-20 overflow-hidden bg-gradient-to-b from-primario-oscuro via-[#1b1350] to-[#120c38] text-[#d9d5f5]">
-      {/* Halos de aurora detrás del pie de página */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-70"
-        style={{
-          background:
-            "radial-gradient(38rem 26rem at 12% 0%, rgba(110,231,220,0.28), transparent 65%), radial-gradient(34rem 26rem at 88% 20%, rgba(214,51,108,0.26), transparent 65%)",
-        }}
-      />
-
-      <div className="relative">
-        {/* Sección de mapa */}
-        <div className="py-12">
-          <div className="mx-auto w-[92%] max-w-[1100px]">
-            <h3 className="mb-6 flex items-center gap-3 text-lg font-bold text-white">
-              <span className="h-px w-8 bg-gradient-to-r from-acento-suave to-transparent" aria-hidden="true" />
-              Encuéntranos
-            </h3>
-            <GoogleMap />
+    <footer className="bg-arena text-primario">
+      <div className="mx-auto w-[92%] max-w-300 pb-10 pt-20 sm:pt-28">
+        <Revelar>
+          <p className="antetitulo">Siguiente parada</p>
+          <h2 className="mt-5 font-display text-[clamp(2.9rem,8.5vw,6.75rem)] leading-[1.02] tracking-[-0.03em]">
+            ¿Listo para tu
+            <br />
+            próximo <em className="titulo-enfasis">destino</em>?
+          </h2>
+          <div className="mt-9 flex flex-wrap items-center gap-3">
+            <Link to="/reservas" className="boton-tinta px-7 py-4 text-sm font-semibold no-underline">
+              Empezar a reservar
+            </Link>
+            <a
+              href="mailto:contacto@auroraviajes.com"
+              className="rounded-full border border-primario/25 px-7 py-4 text-sm font-medium text-primario no-underline transition hover:bg-primario/5"
+            >
+              contacto@auroraviajes.com
+            </a>
           </div>
-        </div>
+        </Revelar>
 
-        {/* Sección de contenido del footer */}
-        <div className="mx-auto grid w-[92%] max-w-[1100px] grid-cols-1 gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-20 grid grid-cols-1 gap-10 border-t border-primario/15 pt-10 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <p className="mb-3 flex items-center gap-2 font-display text-xl font-bold text-white">
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-acento-suave via-primario-suave to-brillo text-base text-white">✦</span>
+            <p className="flex items-center gap-2.5 font-display text-2xl">
+              <span aria-hidden="true" className="grid h-9 w-9 place-items-center rounded-full bg-oro text-base">✦</span>
               Aurora Viajes
             </p>
-            <p className="max-w-xs text-sm leading-relaxed text-[#b7b1e0]">Diseñando itinerarios memorables desde 2015.</p>
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-texto-suave">Diseñando itinerarios memorables desde 2015.</p>
           </div>
 
           <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-acento-suave">Contacto</p>
-            <div className="space-y-1.5 text-sm text-[#b7b1e0]"><p>contacto@auroraviajes.com</p><p>+57 3503576793</p></div>
+            <p className="mb-3 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-texto-suave">Contacto</p>
+            <div className="space-y-1.5 text-sm">
+              <p>contacto@auroraviajes.com</p>
+              <p>+57 350 357 6793</p>
+              <p>Medellín, Colombia</p>
+            </div>
           </div>
 
           <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-acento-suave">Navegación</p>
-            <nav className="flex flex-col items-start gap-2 text-sm text-[#b7b1e0]" aria-label="Navegación del pie de página">
-              <Link to="/" className="transition hover:translate-x-1 hover:text-white">Inicio</Link>
-              <Link to="/recomendaciones" className="transition hover:translate-x-1 hover:text-white">Recomendaciones</Link>
-              <Link to="/quienes-somos" className="transition hover:translate-x-1 hover:text-white">Quiénes somos</Link>
-              <Link to="/reservas" className="transition hover:translate-x-1 hover:text-white">Reservas</Link>
-              <Link to="/contacto" className="transition hover:translate-x-1 hover:text-white">Contacto</Link>
+            <p className="mb-3 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-texto-suave">Navegación</p>
+            <nav className="flex flex-col items-start gap-2 text-sm" aria-label="Navegación del pie de página">
+              {[
+                ["/", "Inicio"],
+                ["/reservas", "Reservar viaje"],
+                ["/recomendaciones", "Recomendaciones"],
+                ["/quienes-somos", "Quiénes somos"],
+                ["/contacto", "Contacto"],
+              ].map(([a, texto]) => (
+                <Link key={a} to={a} className="text-primario no-underline transition hover:translate-x-1 hover:text-acento">
+                  {texto}
+                </Link>
+              ))}
             </nav>
           </div>
 
           <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-acento-suave">Síguenos</p>
-            <div className="flex flex-col items-start gap-2 text-sm text-[#b7b1e0]">
-              <a href="https://www.instagram.com" target="_blank" rel="noreferrer" className="transition hover:translate-x-1 hover:text-white">Instagram</a>
-              <a href="https://www.facebook.com" target="_blank" rel="noreferrer" className="transition hover:translate-x-1 hover:text-white">Facebook</a>
-              <a href="https://wa.me/573503576793" target="_blank" rel="noreferrer" className="transition hover:translate-x-1 hover:text-white">WhatsApp</a>
+            <p className="mb-3 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-texto-suave">Síguenos</p>
+            <div className="flex flex-col items-start gap-2 text-sm">
+              {[
+                ["https://www.instagram.com", "Instagram"],
+                ["https://www.facebook.com", "Facebook"],
+                ["https://wa.me/573503576793", "WhatsApp"],
+              ].map(([href, texto]) => (
+                <a key={href} href={href} target="_blank" rel="noreferrer" className="text-primario no-underline transition hover:translate-x-1 hover:text-acento">
+                  {texto} ↗
+                </a>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="border-t border-white/10 py-5">
-          <p className="mx-auto w-[92%] max-w-[1100px] text-xs text-[#8f89ba]">
-            © {anioActual} Aurora Viajes. Todos los derechos reservados.
-          </p>
-        </div>
+        <p className="mt-14 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-texto-suave">
+          © {anioActual} Aurora Viajes · Hecho en Medellín, Colombia
+        </p>
       </div>
     </footer>
   );

@@ -1,136 +1,69 @@
-# Integración Full Stack
+# Integración full stack
 
-## Panorama general
+Cómo se conectan las piezas de Aurora Viajes. Para arrancar el proyecto y ver el listado de rutas, ve al [README](README.md); para producción, a [DESPLIEGUE.md](DESPLIEGUE.md).
 
-Este proyecto conecta un frontend en React + Vite con un backend en FastAPI que expone endpoints JSON y persiste la información en una base de datos relacional SQL mediante SQLAlchemy.
-
-La integración está pensada para trabajar así:
-
-1. El frontend captura datos en formularios y los valida en la interfaz.
-2. Las peticiones se envían al backend con `fetch` desde una capa única de acceso HTTP.
-3. FastAPI recibe y valida el JSON con Pydantic.
-4. SQLAlchemy traduce las operaciones a SQL contra la base de datos relacional.
-5. El backend responde nuevamente en JSON para que React actualice la interfaz.
-
-## Frontend React + Vite
-
-La aplicación frontend vive en `frontend/` y usa Vite como servidor de desarrollo y empaquetador.
-
-El punto central de comunicación con la API está en [frontend/src/utils/api.js](frontend/src/utils/api.js). Esa capa:
-
-- Define una URL base con `VITE_API_URL` o, si no existe, usa `/api`.
-- Envía el encabezado `Content-Type: application/json`.
-- Serializa el cuerpo de la petición con `JSON.stringify(...)`.
-- Convierte las respuestas a JSON.
-- Normaliza los mensajes de error que devuelve el backend.
-
-Los formularios principales ya consumen esa capa:
-
-- Inicio de sesión en [frontend/src/pages/Login.jsx](frontend/src/pages/Login.jsx)
-- Registro de usuarios en [frontend/src/components/RegisterModal.jsx](frontend/src/components/RegisterModal.jsx)
-- Recuperación de contraseña en [frontend/src/components/RecoverPassword.jsx](frontend/src/components/RecoverPassword.jsx)
-- Contacto en [frontend/src/pages/Contacto.jsx](frontend/src/pages/Contacto.jsx)
-- Panel administrativo y de reservas en [frontend/src/pages/Panel.jsx](frontend/src/pages/Panel.jsx)
-
-La sesión autenticada se guarda en `localStorage` o `sessionStorage` desde [frontend/src/utils/api.js](frontend/src/utils/api.js) y se comparte por contexto en [frontend/src/context/AuthContext.jsx](frontend/src/context/AuthContext.jsx).
-
-## Conexión con FastAPI
-
-El backend está en `backend/app/` y expone rutas JSON bajo el prefijo `/api`.
-
-FastAPI recibe las solicitudes, valida el contenido con Pydantic y devuelve respuestas en JSON. Algunas rutas importantes son:
-
-- `POST /api/auth/login`
-- `POST /api/usuarios/registro`
-- `POST /api/auth/recuperar`
-- `POST /api/auth/restablecer`
-- `GET /api/usuarios`
-- `GET /api/reservas`
-- `POST /api/contacto`
-
-La configuración de CORS está habilitada para el frontend local en `http://localhost:5173` y `http://127.0.0.1:5173`, lo que permite consumir la API desde Vite durante desarrollo.
-
-Además, el frontend ya tiene proxy configurado en [frontend/vite.config.js](frontend/vite.config.js), por lo que cualquier llamada a `/api` se redirige a `http://127.0.0.1:8001` en local.
-
-## Validación JSON
-
-El formato de intercambio entre frontend y backend es JSON.
-
-Ejemplo de envío de login:
-
-```json
-{
-  "correo": "admin@auroraviajes.com",
-  "contrasena": "Admin123!"
-}
+```
+React + Vite ──fetch──▶ FastAPI ──Pydantic──▶ servicios ──SQLAlchemy──▶ MySQL
+   (Cloudflare)          (Railway)                                       (Aiven)
 ```
 
-Ejemplo de respuesta exitosa:
+## Frontend
 
-```json
-{
-  "token": "jwt-aqui",
-  "usuario": {
-    "id": 1,
-    "nombre": "Administrador",
-    "apellido": "Aurora",
-    "correo": "admin@auroraviajes.com",
-    "rol": "administrador",
-    "activo": true
-  }
-}
+### Una sola puerta hacia la API
+
+Todo el tráfico pasa por `solicitar()` en [frontend/src/utils/api.js](frontend/src/utils/api.js). Esa función:
+
+- toma la URL base de `VITE_API_URL` o, si no existe, usa `/api` (en desarrollo Vite lo reenvía a `http://127.0.0.1:8001`, ver [vite.config.js](frontend/vite.config.js));
+- envía y recibe JSON;
+- **adjunta sola el token de la sesión**, de modo que las páginas no repiten la cabecera `Authorization`;
+- convierte los errores del backend en un mensaje legible y cierra la sesión si el token caducó.
+
+### Sesión
+
+`guardarSesion()` guarda el token y el usuario en `localStorage` (si el usuario marca «Recordarme») o en `sessionStorage`. [AuthContext](frontend/src/context/AuthContext.jsx) los comparte con toda la app y se mantiene sincronizado entre pestañas. Las páginas protegidas (`Reservas`, `Panel`, pagos) redirigen a `/login` guardando en `state.desde` a dónde volver, y el Login devuelve al usuario allí tras entrar.
+
+### Estructura de `frontend/src`
+
+| Carpeta | Contenido |
+|---|---|
+| `pages/` | Una por ruta: `Index`, `Login`, `Reservas`, `Panel`, `AvanceCinco` (dashboard comercial), `Recomendaciones`, `PagoReserva`, `PagoExitoso`, `Contacto`, `QuienesSomos` |
+| `components/` | Piezas reutilizables: `Header`, `Footer`, `Sidebar`, formularios (`Input`, `Select`, `Button`, `Modal`), `DestinosGrid`, `Sponsors` y las decoraciones de la portada |
+| `layouts/` | `ClientLayout` (cabecera, pie y WhatsApp) y `AdminLayout` (barra lateral del panel) |
+| `context/` | `AuthContext` |
+| `utils/` | `api.js` y `validaciones.js` (las mismas reglas que valida el backend) |
+| `data/` | `destinos.js`: nombre, texto e ilustración de cada destino |
+
+El enrutado está en [App.jsx](frontend/src/App.jsx): las rutas `/panel*` usan `AdminLayout` cuando hay sesión; el resto, `ClientLayout`.
+
+## Backend
+
+Rutas JSON bajo `/api`, en capas que no se saltan:
+
+1. **`routers/`** reciben la petición, aplican la autorización y devuelven JSON. No contienen reglas de negocio.
+2. **`schemas/`** validan la entrada con Pydantic. Los errores salen con un formato único: `{codigo, mensaje, ruta, detalles}`.
+3. **`services/`** guardan las reglas: qué vuelo, hotel y excursiones son válidos, cuánto cuesta, cómo se factura, cómo se cobra.
+4. **`models/dominio.py`** define las tablas con SQLAlchemy async. La sesión de base de datos se abre y cierra por petición ([core/base_datos.py](backend/app/core/base_datos.py)).
+
+### Seguridad
+
+- Las contraseñas se guardan con **argon2** y nunca en texto plano ([core/seguridad.py](backend/app/core/seguridad.py)).
+- La sesión es un **JWT** con un campo `purpose`: el token del correo de recuperación solo sirve para restablecer la contraseña y no abre sesión.
+- El rol se lee de la base en cada petición, no del token.
+- Login, registro, recuperación, contacto y chatbot tienen **límite de peticiones**; el chatbot además exige sesión y arma su contexto con mensajes que guardó el propio servidor.
+- Las respuestas llevan cabeceras de seguridad y CORS solo admite `ORIGENES_PERMITIDOS`.
+
+### Una reserva de principio a fin
+
+```
+POST /reservas ─▶ preparar_reserva()   valida vuelo, hotel y excursiones contra el catálogo y calcula el precio
+              ─▶ crea Reserva + Venta (enlazada) + Factura, en una sola transacción
+POST /reservas/{id}/pago/checkout ─▶ un único enlace de Stripe abierto por reserva
+Stripe cobra ─▶ POST /pagos/stripe/webhook   (firmado)   ─▶ reserva "confirmada / pagada" y venta "completada"
+             └▶ el navegador vuelve a /reservas/pago-exitoso y llama a .../pago/confirmar (respaldo)
 ```
 
-## Backend con base de datos relacional SQL
+Ambas vías de confirmación son idempotentes: da igual cuál llegue primero o si llegan las dos. Antes de aceptar un pago se comprueba que la sesión de Stripe pertenezca a esa reserva y que el importe y la moneda coincidan con su total. El estado de la venta y de su factura se deriva siempre del estado de la reserva (`services/reservas.py::sincronizar_venta`).
 
-La persistencia está implementada con SQLAlchemy en [backend/app/database.py](backend/app/database.py) y la configuración de conexión en [backend/app/config.py](backend/app/config.py).
+### Base de datos
 
-### Flujo de conexión
-
-1. `DATABASE_URL` define el motor y credenciales de la base de datos.
-2. SQLAlchemy crea el `engine`.
-3. `SessionLocal` administra sesiones por petición.
-4. `Base.metadata.create_all(bind=engine)` crea las tablas a partir de los modelos.
-5. Las rutas usan `get_db()` para abrir y cerrar sesiones de forma segura.
-
-### Base relacional
-
-El esquema relacional soporta entidades como:
-
-- usuarios
-- roles
-- permisos
-- reservas
-- productos
-- servicios
-- mensajes de contacto
-
-La contraseña nunca se guarda en texto plano. Se hashea con bcrypt desde [backend/app/security.py](backend/app/security.py).
-
-## Ejecución local
-
-Frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Backend:
-
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --host 127.0.0.1 --reload --port 8001
-```
-
-## Resumen técnico
-
-La arquitectura final queda así:
-
-React + Vite -> fetch -> FastAPI -> Pydantic -> SQLAlchemy -> Base de datos SQL
-
-Ese flujo mantiene separada la interfaz del almacenamiento, centraliza la comunicación HTTP en una sola utilidad y deja el backend como fuente única de validación y persistencia.
+Las tablas nacen de los modelos (`create_all`). Los cambios de esquema en bases ya existentes los aplica `services/siembra.py` al arrancar, de forma idempotente y solo en MySQL; hoy incluyen la columna `ventas.reserva_id` y el emparejamiento de las ventas anteriores con su reserva. Para bases nuevas y para documentar, `sql/schema.sql` se genera desde los modelos con `python -m scripts.exportar_esquema`.

@@ -1,413 +1,366 @@
+-- Generado por scripts/exportar_esquema.py a partir de app/models/dominio.py. No editar a mano.
+-- Solo estructura: el catálogo, los roles y el administrador los siembra la aplicación al arrancar.
 CREATE DATABASE IF NOT EXISTS aurora_viajes CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE aurora_viajes;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS detalle_facturas;
+DROP TABLE IF EXISTS facturas;
+DROP TABLE IF EXISTS detalle_ventas;
+DROP TABLE IF EXISTS ventas;
+DROP TABLE IF EXISTS reserva_excursiones;
 DROP TABLE IF EXISTS reservas;
 DROP TABLE IF EXISTS paquete_excursiones;
-DROP TABLE IF EXISTS paquetes;
-DROP TABLE IF EXISTS excursiones;
-DROP TABLE IF EXISTS hoteles;
-DROP TABLE IF EXISTS vuelos;
-DROP TABLE IF EXISTS mensajes_contacto;
-DROP TABLE IF EXISTS detalle_ventas;
-DROP TABLE IF EXISTS detalle_facturas;
 DROP TABLE IF EXISTS mensajes;
-DROP TABLE IF EXISTS conversaciones;
-DROP TABLE IF EXISTS facturas;
-DROP TABLE IF EXISTS ventas;
 DROP TABLE IF EXISTS pqr;
+DROP TABLE IF EXISTS paquetes;
+DROP TABLE IF EXISTS conversaciones;
 DROP TABLE IF EXISTS usuarios;
-DROP TABLE IF EXISTS productos;
-DROP TABLE IF EXISTS servicios;
 DROP TABLE IF EXISTS rol_permisos;
-DROP TABLE IF EXISTS permisos;
-DROP TABLE IF EXISTS roles;
-DROP TABLE IF EXISTS metodos_pago;
-DROP TABLE IF EXISTS estados_pago;
-DROP TABLE IF EXISTS estados_reserva;
 DROP TABLE IF EXISTS destinos;
-DROP TABLE IF EXISTS paises;
+DROP TABLE IF EXISTS vuelos;
 DROP TABLE IF EXISTS tipos_documento;
+DROP TABLE IF EXISTS servicios;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS productos;
+DROP TABLE IF EXISTS permisos;
+DROP TABLE IF EXISTS paises;
+DROP TABLE IF EXISTS metodos_pago;
+DROP TABLE IF EXISTS mensajes_contacto;
+DROP TABLE IF EXISTS hoteles;
+DROP TABLE IF EXISTS excursiones;
+DROP TABLE IF EXISTS estados_reserva;
+DROP TABLE IF EXISTS estados_pago;
 SET FOREIGN_KEY_CHECKS = 1;
 
-CREATE TABLE roles (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(30) NOT NULL UNIQUE
-);
-
-CREATE TABLE permisos (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(80) NOT NULL UNIQUE
-);
-
-CREATE TABLE rol_permisos (
-  rol_id INT UNSIGNED NOT NULL,
-  permiso_id INT UNSIGNED NOT NULL,
-  PRIMARY KEY (rol_id, permiso_id),
-  CONSTRAINT fk_rolpermiso_rol FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE CASCADE,
-  CONSTRAINT fk_rolpermiso_permiso FOREIGN KEY (permiso_id) REFERENCES permisos(id) ON DELETE CASCADE
-);
-
-CREATE TABLE tipos_documento (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  codigo VARCHAR(5) NOT NULL UNIQUE,
-  nombre VARCHAR(40) NOT NULL
-);
-
-CREATE TABLE paises (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(80) NOT NULL UNIQUE
-);
-
-CREATE TABLE destinos (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  pais_id INT UNSIGNED NOT NULL,
-  nombre VARCHAR(120) NOT NULL UNIQUE,
-  descripcion TEXT,
-  precio_base DECIMAL(12,2) NOT NULL DEFAULT 0,
-  imagen_slug VARCHAR(80),
-  activo BOOLEAN NOT NULL DEFAULT TRUE,
-  CONSTRAINT fk_destino_pais FOREIGN KEY (pais_id) REFERENCES paises(id) ON DELETE RESTRICT
+CREATE TABLE estados_pago (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	codigo VARCHAR(30) NOT NULL, 
+	nombre VARCHAR(40) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (codigo)
 );
 
 CREATE TABLE estados_reserva (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  codigo VARCHAR(30) NOT NULL UNIQUE,
-  nombre VARCHAR(40) NOT NULL
-);
-
-CREATE TABLE estados_pago (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  codigo VARCHAR(30) NOT NULL UNIQUE,
-  nombre VARCHAR(40) NOT NULL
-);
-
-CREATE TABLE metodos_pago (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  codigo VARCHAR(30) NOT NULL UNIQUE,
-  nombre VARCHAR(40) NOT NULL
-);
-
-CREATE TABLE usuarios (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(40) NOT NULL,
-  apellido VARCHAR(40) NOT NULL,
-  tipo_documento_id INT UNSIGNED NOT NULL,
-  numero_documento VARCHAR(12) NOT NULL UNIQUE,
-  direccion VARCHAR(80) NOT NULL,
-  telefono VARCHAR(10) NOT NULL,
-  correo VARCHAR(60) NOT NULL UNIQUE,
-  contrasena_hash VARCHAR(255) NOT NULL,
-  activo BOOLEAN NOT NULL DEFAULT TRUE,
-  rol_id INT UNSIGNED NOT NULL,
-  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_usuario_tipodoc FOREIGN KEY (tipo_documento_id) REFERENCES tipos_documento(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_usuario_rol FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE RESTRICT
-);
-
-CREATE TABLE productos (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL,
-  descripcion TEXT,
-  precio DECIMAL(12,2) NOT NULL DEFAULT 0,
-  activo BOOLEAN NOT NULL DEFAULT TRUE
-);
-
-CREATE TABLE servicios (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL,
-  descripcion TEXT,
-  precio DECIMAL(12,2) NOT NULL DEFAULT 0,
-  activo BOOLEAN NOT NULL DEFAULT TRUE
-);
-
-CREATE TABLE vuelos (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  numero_vuelo VARCHAR(20) NOT NULL UNIQUE,
-  aerolinea VARCHAR(80) NOT NULL,
-  avion VARCHAR(80) NOT NULL,
-  origen VARCHAR(120) NOT NULL,
-  destino VARCHAR(120) NOT NULL,
-  fecha_salida DATETIME NOT NULL,
-  fecha_llegada DATETIME NOT NULL,
-  capacidad_maxima SMALLINT UNSIGNED NOT NULL,
-  puerta VARCHAR(10),
-  terminal VARCHAR(20),
-  estado VARCHAR(20) NOT NULL DEFAULT 'programado',
-  activo BOOLEAN NOT NULL DEFAULT TRUE,
-  CONSTRAINT chk_vuelo_horario CHECK (fecha_llegada > fecha_salida),
-  CONSTRAINT chk_vuelo_capacidad CHECK (capacidad_maxima BETWEEN 1 AND 1000)
-);
-
-CREATE TABLE hoteles (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(120) NOT NULL,
-  ciudad VARCHAR(120) NOT NULL,
-  pais VARCHAR(120) NOT NULL,
-  estrellas TINYINT UNSIGNED NOT NULL,
-  precio_noche DECIMAL(12,2) NOT NULL DEFAULT 0,
-  descripcion TEXT,
-  activo BOOLEAN NOT NULL DEFAULT TRUE,
-  CONSTRAINT chk_hotel_estrellas CHECK (estrellas BETWEEN 1 AND 5),
-  CONSTRAINT chk_hotel_precio CHECK (precio_noche >= 0)
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	codigo VARCHAR(30) NOT NULL, 
+	nombre VARCHAR(40) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (codigo)
 );
 
 CREATE TABLE excursiones (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(120) NOT NULL,
-  ciudad VARCHAR(120) NOT NULL,
-  pais VARCHAR(120) NOT NULL,
-  duracion_horas SMALLINT UNSIGNED NOT NULL,
-  precio DECIMAL(12,2) NOT NULL DEFAULT 0,
-  descripcion TEXT,
-  activo BOOLEAN NOT NULL DEFAULT TRUE,
-  CONSTRAINT chk_excursion_duracion CHECK (duracion_horas BETWEEN 1 AND 48),
-  CONSTRAINT chk_excursion_precio CHECK (precio >= 0)
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(120) NOT NULL, 
+	ciudad VARCHAR(120) NOT NULL, 
+	pais VARCHAR(120) NOT NULL, 
+	duracion_horas INTEGER NOT NULL, 
+	precio NUMERIC(12, 2) NOT NULL, 
+	descripcion TEXT, 
+	activo BOOL NOT NULL, 
+	PRIMARY KEY (id)
 );
 
-CREATE TABLE paquetes (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(140) NOT NULL,
-  destino_id INT UNSIGNED NOT NULL,
-  vuelo_id INT NOT NULL,
-  hotel_id INT NOT NULL,
-  fecha_salida DATE NOT NULL,
-  fecha_regreso DATE NOT NULL,
-  precio_base DECIMAL(12,2) NOT NULL DEFAULT 0,
-  activo BOOLEAN NOT NULL DEFAULT TRUE,
-  CONSTRAINT fk_paquete_destino FOREIGN KEY (destino_id) REFERENCES destinos(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_paquete_vuelo FOREIGN KEY (vuelo_id) REFERENCES vuelos(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_paquete_hotel FOREIGN KEY (hotel_id) REFERENCES hoteles(id) ON DELETE RESTRICT,
-  CONSTRAINT chk_paquete_fechas CHECK (fecha_regreso >= fecha_salida),
-  CONSTRAINT chk_paquete_precio CHECK (precio_base >= 0)
-);
-
-CREATE TABLE paquete_excursiones (
-  paquete_id INT NOT NULL,
-  excursion_id INT NOT NULL,
-  PRIMARY KEY (paquete_id, excursion_id),
-  CONSTRAINT fk_paquete_excursion_paquete FOREIGN KEY (paquete_id) REFERENCES paquetes(id) ON DELETE CASCADE,
-  CONSTRAINT fk_paquete_excursion_excursion FOREIGN KEY (excursion_id) REFERENCES excursiones(id) ON DELETE RESTRICT
-);
-
-CREATE TABLE reservas (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  usuario_id INT UNSIGNED NOT NULL,
-  destino_id INT UNSIGNED NOT NULL,
-  vuelo_id INT NULL,
-  paquete_id INT NULL,
-  fecha_salida DATE NOT NULL,
-  fecha_regreso DATE NOT NULL,
-  pasajeros TINYINT UNSIGNED NOT NULL DEFAULT 1,
-  telefono_contacto VARCHAR(10) NOT NULL,
-  notas VARCHAR(300),
-  estado_id INT UNSIGNED NOT NULL,
-  estado_pago_id INT UNSIGNED NOT NULL,
-  metodo_pago_id INT UNSIGNED NULL,
-  monto_total DECIMAL(12,2) NOT NULL DEFAULT 0,
-  stripe_session_id VARCHAR(255),
-  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_reserva_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-  CONSTRAINT fk_reserva_destino FOREIGN KEY (destino_id) REFERENCES destinos(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_reserva_vuelo FOREIGN KEY (vuelo_id) REFERENCES vuelos(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_reserva_paquete FOREIGN KEY (paquete_id) REFERENCES paquetes(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_reserva_estado FOREIGN KEY (estado_id) REFERENCES estados_reserva(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_reserva_estado_pago FOREIGN KEY (estado_pago_id) REFERENCES estados_pago(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_reserva_metodo_pago FOREIGN KEY (metodo_pago_id) REFERENCES metodos_pago(id) ON DELETE SET NULL
+CREATE TABLE hoteles (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(120) NOT NULL, 
+	ciudad VARCHAR(120) NOT NULL, 
+	pais VARCHAR(120) NOT NULL, 
+	estrellas INTEGER NOT NULL, 
+	precio_noche NUMERIC(12, 2) NOT NULL, 
+	descripcion TEXT, 
+	activo BOOL NOT NULL, 
+	PRIMARY KEY (id)
 );
 
 CREATE TABLE mensajes_contacto (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(80) NOT NULL,
-  correo VARCHAR(100) NOT NULL,
-  mensaje TEXT NOT NULL,
-  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(80) NOT NULL, 
+	correo VARCHAR(100) NOT NULL, 
+	mensaje TEXT NOT NULL, 
+	creado_en DATETIME NOT NULL, 
+	PRIMARY KEY (id)
 );
 
-CREATE TABLE ventas (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  cliente_id INT UNSIGNED NOT NULL,
-  usuario_id INT UNSIGNED NULL,
-  subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
-  descuento DECIMAL(12,2) NOT NULL DEFAULT 0,
-  impuestos DECIMAL(12,2) NOT NULL DEFAULT 0,
-  total DECIMAL(12,2) NOT NULL DEFAULT 0,
-  estado VARCHAR(30) NOT NULL DEFAULT 'completada',
-  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_venta_cliente FOREIGN KEY (cliente_id) REFERENCES usuarios(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_venta_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+CREATE TABLE metodos_pago (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	codigo VARCHAR(30) NOT NULL, 
+	nombre VARCHAR(40) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (codigo)
 );
 
-CREATE TABLE detalle_ventas (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  venta_id INT UNSIGNED NOT NULL,
-  producto_id INT NULL,
-  servicio_id INT NULL,
-  nombre VARCHAR(140) NOT NULL,
-  cantidad INT UNSIGNED NOT NULL,
-  precio_unitario DECIMAL(12,2) NOT NULL,
-  subtotal DECIMAL(12,2) NOT NULL,
-  CONSTRAINT fk_detalle_venta FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
-  CONSTRAINT fk_detalle_producto FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_detalle_servicio FOREIGN KEY (servicio_id) REFERENCES servicios(id) ON DELETE RESTRICT
+CREATE TABLE paises (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(80) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (nombre)
 );
 
-CREATE TABLE facturas (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  venta_id INT UNSIGNED NOT NULL UNIQUE,
-  numero VARCHAR(40) NOT NULL UNIQUE,
-  estado VARCHAR(30) NOT NULL DEFAULT 'emitida',
-  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_factura_venta FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE
+CREATE TABLE permisos (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(80) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (nombre)
 );
 
-CREATE TABLE detalle_facturas (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  factura_id INT UNSIGNED NOT NULL,
-  nombre VARCHAR(140) NOT NULL,
-  cantidad INT UNSIGNED NOT NULL,
-  precio_unitario DECIMAL(12,2) NOT NULL,
-  subtotal DECIMAL(12,2) NOT NULL,
-  CONSTRAINT fk_detalle_factura FOREIGN KEY (factura_id) REFERENCES facturas(id) ON DELETE CASCADE
+CREATE TABLE productos (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(100) NOT NULL, 
+	descripcion TEXT, 
+	precio NUMERIC(12, 2) NOT NULL, 
+	activo BOOL NOT NULL, 
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE roles (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(30) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (nombre)
+);
+
+CREATE TABLE servicios (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(100) NOT NULL, 
+	descripcion TEXT, 
+	precio NUMERIC(12, 2) NOT NULL, 
+	activo BOOL NOT NULL, 
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE tipos_documento (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	codigo VARCHAR(5) NOT NULL, 
+	nombre VARCHAR(40) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (codigo)
+);
+
+CREATE TABLE vuelos (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	numero_vuelo VARCHAR(20) NOT NULL, 
+	aerolinea VARCHAR(80) NOT NULL, 
+	avion VARCHAR(80) NOT NULL, 
+	origen VARCHAR(120) NOT NULL, 
+	destino VARCHAR(120) NOT NULL, 
+	fecha_salida DATETIME NOT NULL, 
+	fecha_llegada DATETIME NOT NULL, 
+	capacidad_maxima INTEGER NOT NULL, 
+	puerta VARCHAR(10), 
+	terminal VARCHAR(20), 
+	estado VARCHAR(20) NOT NULL, 
+	activo BOOL NOT NULL, 
+	PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX ix_vuelos_numero_vuelo ON vuelos (numero_vuelo);
+
+CREATE TABLE destinos (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	pais_id INTEGER NOT NULL, 
+	nombre VARCHAR(120) NOT NULL, 
+	descripcion TEXT, 
+	precio_base NUMERIC(12, 2) NOT NULL, 
+	imagen_slug VARCHAR(80), 
+	activo BOOL NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(pais_id) REFERENCES paises (id), 
+	UNIQUE (nombre)
+);
+
+CREATE TABLE rol_permisos (
+	rol_id INTEGER NOT NULL, 
+	permiso_id INTEGER NOT NULL, 
+	PRIMARY KEY (rol_id, permiso_id), 
+	FOREIGN KEY(rol_id) REFERENCES roles (id), 
+	FOREIGN KEY(permiso_id) REFERENCES permisos (id)
+);
+
+CREATE TABLE usuarios (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(40) NOT NULL, 
+	apellido VARCHAR(40) NOT NULL, 
+	tipo_documento_id INTEGER NOT NULL, 
+	numero_documento VARCHAR(12) NOT NULL, 
+	direccion VARCHAR(80) NOT NULL, 
+	telefono VARCHAR(10) NOT NULL, 
+	correo VARCHAR(60) NOT NULL, 
+	contrasena_hash VARCHAR(255) NOT NULL, 
+	activo BOOL NOT NULL, 
+	rol_id INTEGER NOT NULL, 
+	creado_en DATETIME NOT NULL, 
+	actualizado_en DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(tipo_documento_id) REFERENCES tipos_documento (id), 
+	FOREIGN KEY(rol_id) REFERENCES roles (id)
+);
+CREATE UNIQUE INDEX ix_usuarios_correo ON usuarios (correo);
+CREATE UNIQUE INDEX ix_usuarios_numero_documento ON usuarios (numero_documento);
+
+CREATE TABLE conversaciones (
+	id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, 
+	cliente_id INTEGER, 
+	creado_en DATETIME NOT NULL, 
+	actualizado_en DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(cliente_id) REFERENCES usuarios (id) ON DELETE SET NULL
+);
+CREATE INDEX ix_conversaciones_cliente_id ON conversaciones (cliente_id);
+
+CREATE TABLE paquetes (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	nombre VARCHAR(140) NOT NULL, 
+	destino_id INTEGER NOT NULL, 
+	vuelo_id INTEGER NOT NULL, 
+	hotel_id INTEGER NOT NULL, 
+	fecha_salida DATE NOT NULL, 
+	fecha_regreso DATE NOT NULL, 
+	precio_base NUMERIC(12, 2) NOT NULL, 
+	activo BOOL NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(destino_id) REFERENCES destinos (id), 
+	FOREIGN KEY(vuelo_id) REFERENCES vuelos (id), 
+	FOREIGN KEY(hotel_id) REFERENCES hoteles (id)
 );
 
 CREATE TABLE pqr (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  cliente_id INT UNSIGNED NOT NULL,
-  tipo VARCHAR(30) NOT NULL,
-  asunto VARCHAR(140) NOT NULL,
-  descripcion TEXT NOT NULL,
-  respuesta TEXT,
-  estado VARCHAR(30) NOT NULL DEFAULT 'pendiente',
-  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_pqr_cliente FOREIGN KEY (cliente_id) REFERENCES usuarios(id) ON DELETE CASCADE
+	id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, 
+	cliente_id INTEGER NOT NULL, 
+	tipo VARCHAR(30) NOT NULL, 
+	asunto VARCHAR(140) NOT NULL, 
+	descripcion TEXT NOT NULL, 
+	respuesta TEXT, 
+	estado VARCHAR(30) NOT NULL, 
+	creado_en DATETIME NOT NULL, 
+	actualizado_en DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(cliente_id) REFERENCES usuarios (id)
 );
-
-CREATE TABLE conversaciones (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  cliente_id INT UNSIGNED NULL,
-  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_conversacion_cliente FOREIGN KEY (cliente_id) REFERENCES usuarios(id) ON DELETE SET NULL
-);
+CREATE INDEX ix_pqr_cliente_id ON pqr (cliente_id);
+CREATE INDEX ix_pqr_estado ON pqr (estado);
 
 CREATE TABLE mensajes (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  conversacion_id INT UNSIGNED NOT NULL,
-  rol VARCHAR(20) NOT NULL,
-  contenido TEXT NOT NULL,
-  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_mensaje_conversacion FOREIGN KEY (conversacion_id) REFERENCES conversaciones(id) ON DELETE CASCADE
+	id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, 
+	conversacion_id INTEGER UNSIGNED NOT NULL, 
+	rol VARCHAR(20) NOT NULL, 
+	contenido TEXT NOT NULL, 
+	creado_en DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(conversacion_id) REFERENCES conversaciones (id) ON DELETE CASCADE
+);
+CREATE INDEX ix_mensajes_conversacion_id ON mensajes (conversacion_id);
+
+CREATE TABLE paquete_excursiones (
+	paquete_id INTEGER NOT NULL, 
+	excursion_id INTEGER NOT NULL, 
+	PRIMARY KEY (paquete_id, excursion_id), 
+	FOREIGN KEY(paquete_id) REFERENCES paquetes (id), 
+	FOREIGN KEY(excursion_id) REFERENCES excursiones (id)
 );
 
-INSERT INTO tipos_documento (codigo, nombre) VALUES
-  ('CC', 'Cédula de ciudadanía'),
-  ('TI', 'Tarjeta de identidad'),
-  ('CE', 'Cédula de extranjería'),
-  ('PA', 'Pasaporte')
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+CREATE TABLE reservas (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	usuario_id INTEGER NOT NULL, 
+	destino_id INTEGER NOT NULL, 
+	vuelo_id INTEGER, 
+	paquete_id INTEGER, 
+	hotel_id INTEGER, 
+	fecha_salida DATE NOT NULL, 
+	fecha_regreso DATE NOT NULL, 
+	pasajeros INTEGER NOT NULL, 
+	telefono_contacto VARCHAR(10) NOT NULL, 
+	notas VARCHAR(300), 
+	estado_id INTEGER NOT NULL, 
+	estado_pago_id INTEGER NOT NULL, 
+	metodo_pago_id INTEGER, 
+	monto_total NUMERIC(12, 2) NOT NULL, 
+	monto_vuelo NUMERIC(12, 2) NOT NULL, 
+	monto_hotel NUMERIC(12, 2) NOT NULL, 
+	monto_excursiones NUMERIC(12, 2) NOT NULL, 
+	stripe_session_id VARCHAR(255), 
+	creado_en DATETIME NOT NULL, 
+	actualizado_en DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(usuario_id) REFERENCES usuarios (id), 
+	FOREIGN KEY(destino_id) REFERENCES destinos (id), 
+	FOREIGN KEY(vuelo_id) REFERENCES vuelos (id), 
+	FOREIGN KEY(paquete_id) REFERENCES paquetes (id), 
+	FOREIGN KEY(hotel_id) REFERENCES hoteles (id), 
+	FOREIGN KEY(estado_id) REFERENCES estados_reserva (id), 
+	FOREIGN KEY(estado_pago_id) REFERENCES estados_pago (id), 
+	FOREIGN KEY(metodo_pago_id) REFERENCES metodos_pago (id)
+);
+CREATE INDEX ix_reservas_destino_id ON reservas (destino_id);
+CREATE INDEX ix_reservas_hotel_id ON reservas (hotel_id);
+CREATE INDEX ix_reservas_paquete_id ON reservas (paquete_id);
+CREATE INDEX ix_reservas_usuario_id ON reservas (usuario_id);
+CREATE INDEX ix_reservas_vuelo_id ON reservas (vuelo_id);
 
-INSERT INTO paises (nombre) VALUES
-  ('Francia'),
-  ('Japón'),
-  ('Indonesia'),
-  ('Colombia'),
-  ('Grecia'),
-  ('Perú'),
-  ('Marruecos'),
-  ('Islandia'),
-  ('Estados Unidos'),
-  ('Egipto')
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+CREATE TABLE reserva_excursiones (
+	reserva_id INTEGER NOT NULL, 
+	excursion_id INTEGER NOT NULL, 
+	PRIMARY KEY (reserva_id, excursion_id), 
+	FOREIGN KEY(reserva_id) REFERENCES reservas (id) ON DELETE CASCADE, 
+	FOREIGN KEY(excursion_id) REFERENCES excursiones (id)
+);
 
-INSERT INTO estados_reserva (codigo, nombre) VALUES
-  ('pendiente', 'Pendiente'),
-  ('confirmada', 'Confirmada'),
-  ('cancelada', 'Cancelada')
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+CREATE TABLE ventas (
+	id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, 
+	cliente_id INTEGER NOT NULL, 
+	usuario_id INTEGER, 
+	reserva_id INTEGER, 
+	subtotal NUMERIC(12, 2) NOT NULL, 
+	descuento NUMERIC(12, 2) NOT NULL, 
+	impuestos NUMERIC(12, 2) NOT NULL, 
+	total NUMERIC(12, 2) NOT NULL, 
+	estado VARCHAR(30) NOT NULL, 
+	creado_en DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(cliente_id) REFERENCES usuarios (id), 
+	FOREIGN KEY(usuario_id) REFERENCES usuarios (id), 
+	UNIQUE (reserva_id), 
+	FOREIGN KEY(reserva_id) REFERENCES reservas (id) ON DELETE SET NULL
+);
+CREATE INDEX ix_ventas_cliente_id ON ventas (cliente_id);
+CREATE INDEX ix_ventas_creado_en ON ventas (creado_en);
+CREATE INDEX ix_ventas_estado ON ventas (estado);
 
-INSERT INTO estados_pago (codigo, nombre) VALUES
-  ('pendiente', 'Pendiente'),
-  ('pagado', 'Pagado'),
-  ('fallido', 'Fallido')
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+CREATE TABLE detalle_ventas (
+	id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, 
+	venta_id INTEGER UNSIGNED NOT NULL, 
+	producto_id INTEGER, 
+	servicio_id INTEGER, 
+	nombre VARCHAR(140) NOT NULL, 
+	cantidad INTEGER NOT NULL, 
+	precio_unitario NUMERIC(12, 2) NOT NULL, 
+	subtotal NUMERIC(12, 2) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(venta_id) REFERENCES ventas (id) ON DELETE CASCADE, 
+	FOREIGN KEY(producto_id) REFERENCES productos (id), 
+	FOREIGN KEY(servicio_id) REFERENCES servicios (id)
+);
+CREATE INDEX ix_detalle_ventas_venta_id ON detalle_ventas (venta_id);
 
-INSERT INTO metodos_pago (codigo, nombre) VALUES
-  ('stripe', 'Stripe'),
-  ('transferencia', 'Transferencia')
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+CREATE TABLE facturas (
+	id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, 
+	venta_id INTEGER UNSIGNED NOT NULL, 
+	numero VARCHAR(40) NOT NULL, 
+	estado VARCHAR(30) NOT NULL, 
+	creado_en DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (venta_id), 
+	FOREIGN KEY(venta_id) REFERENCES ventas (id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX ix_facturas_numero ON facturas (numero);
 
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'París, Francia', 'Recorre el Sena al atardecer y descubre por qué la Ciudad Luz sigue inspirando a viajeros de todo el mundo.', 6900000, 'paris', TRUE
-FROM paises p WHERE p.nombre = 'Francia'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'Kioto, Japón', 'Templos centenarios, jardines de piedra y la calma de los bosques de bambú te esperan en el antiguo Japón.', 8400000, 'kioto', TRUE
-FROM paises p WHERE p.nombre = 'Japón'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'Bali, Indonesia', 'Playas volcánicas, arrozales en terraza y una cultura espiritual que transforma cada visita en un ritual.', 7600000, 'bali', TRUE
-FROM paises p WHERE p.nombre = 'Indonesia'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'Cartagena, Colombia', 'Murallas coloniales, calles de colores y el Caribe a un paso: la joya histórica de Colombia.', 1200000, 'cartagena', TRUE
-FROM paises p WHERE p.nombre = 'Colombia'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'Santorini, Grecia', 'Casas blancas suspendidas sobre el mar Egeo y atardeceres que se han vuelto leyenda.', 9800000, 'santorini', TRUE
-FROM paises p WHERE p.nombre = 'Grecia'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'Cusco, Perú', 'Puerta de entrada a Machu Picchu y corazón del imperio inca, entre montañas y terrazas ancestrales.', 2500000, 'cusco', TRUE
-FROM paises p WHERE p.nombre = 'Perú'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'Marrakech, Marruecos', 'Zocos bulliciosos, palacios ocultos y el aroma a especias en cada esquina de la medina.', 8900000, 'marrakech', TRUE
-FROM paises p WHERE p.nombre = 'Marruecos'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'Reikiavik, Islandia', 'Auroras boreales, fuentes termales y paisajes volcánicos al borde del Atlántico Norte.', 10800000, 'reikiavik', TRUE
-FROM paises p WHERE p.nombre = 'Islandia'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'Nueva York, EE. UU.', 'Rascacielos icónicos, parques urbanos y una energía que nunca duerme.', 7200000, 'nueva-york', TRUE
-FROM paises p WHERE p.nombre = 'Estados Unidos'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO destinos (pais_id, nombre, descripcion, precio_base, imagen_slug, activo)
-SELECT p.id, 'El Cairo, Egipto', 'Las pirámides de Giza y el Nilo milenario te acercan a una de las civilizaciones más fascinantes de la historia.', 9300000, 'cairo', TRUE
-FROM paises p WHERE p.nombre = 'Egipto'
-ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), precio_base = VALUES(precio_base), imagen_slug = VALUES(imagen_slug), activo = VALUES(activo);
-
-INSERT INTO roles (nombre) VALUES ('administrador'), ('empleado'), ('cliente')
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
-
-INSERT INTO permisos (nombre) VALUES
-  ('usuarios:gestionar'),
-  ('productos:gestionar'),
-  ('servicios:gestionar'),
-  ('reservas:gestionar'),
-  ('reservas:crear'),
-  ('mensajes:leer')
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
-
-INSERT INTO rol_permisos (rol_id, permiso_id)
-SELECT r.id, p.id
-FROM roles r
-JOIN permisos p ON (
-  (r.nombre = 'administrador' AND p.nombre IN ('usuarios:gestionar','productos:gestionar','servicios:gestionar','reservas:gestionar','mensajes:leer')) OR
-  (r.nombre = 'empleado' AND p.nombre IN ('reservas:gestionar')) OR
-  (r.nombre = 'cliente' AND p.nombre IN ('reservas:crear'))
-)
-ON DUPLICATE KEY UPDATE permiso_id = VALUES(permiso_id);
+CREATE TABLE detalle_facturas (
+	id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, 
+	factura_id INTEGER UNSIGNED NOT NULL, 
+	nombre VARCHAR(140) NOT NULL, 
+	cantidad INTEGER NOT NULL, 
+	precio_unitario NUMERIC(12, 2) NOT NULL, 
+	subtotal NUMERIC(12, 2) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(factura_id) REFERENCES facturas (id) ON DELETE CASCADE
+);
+CREATE INDEX ix_detalle_facturas_factura_id ON detalle_facturas (factura_id);

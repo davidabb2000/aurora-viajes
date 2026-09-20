@@ -1,65 +1,169 @@
-import { Link } from "react-router-dom";
-import Carousel from "../components/Carousel";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import destinosBase from "../data/destinos";
+import { solicitar } from "../utils/api";
+import DestinosGrid from "../components/DestinosGrid";
 import Sponsors from "../components/Sponsors";
-import destinos from "../data/destinos";
+import Revelar from "../components/Revelar";
+import TextoRevelado from "../components/TextoRevelado";
+import { BordeDeNubes, Nube, PaseDeAbordar, SenderoDeVuelo, SolRayado } from "../components/Decoraciones";
 
-const ventajas = [
-  { icono: "✈", titulo: "Vuelos incluidos", texto: "Cada reserva sale con su vuelo asignado y su tarifa por pasajero." },
-  { icono: "◈", titulo: "Hoteles curados", texto: "Alojamiento verificado en el destino, con noches y habitaciones calculadas." },
-  { icono: "✦", titulo: "Excursiones locales", texto: "Actividades guiadas que sumas al viaje y se cobran por separado." },
+const HISTORIA = [
+  { texto: "Empezamos en 2015 con tres destinos y un equipo de cuatro personas. Hoy armamos viajes completos: " },
+  { texto: "el vuelo, el hotel y las excursiones en una sola reserva,", negrita: true },
+  { texto: " con el precio claro desde el primer día y sin sorpresas a la hora de pagar." },
+];
+
+const CIERRE = [{ texto: "Un buen viaje se planea con calma, se paga con seguridad y se recuerda toda la vida.", negrita: true }];
+
+const PASOS = [
+  {
+    numero: "01",
+    titulo: "Elige tu destino",
+    texto: "Diez ciudades con vuelo asignado y tarifa por pasajero. Si dudas, pídele una recomendación a nuestro asistente.",
+    etiqueta: "Vuelo incluido",
+    giro: "md:-rotate-2",
+  },
+  {
+    numero: "02",
+    titulo: "Arma tu viaje",
+    texto: "Un paquete cerrado o a la carta: tú eliges el hotel, las noches y las excursiones que quieres sumar.",
+    etiqueta: "Hotel y excursiones",
+    giro: "md:rotate-1",
+  },
+  {
+    numero: "03",
+    titulo: "Paga y sigue el viaje",
+    texto: "Pago seguro con Stripe, factura en PDF y el estado de tu reserva siempre a la vista en tu panel.",
+    etiqueta: "Pago seguro",
+    giro: "md:rotate-2",
+  },
 ];
 
 function Index() {
+  const { hash } = useLocation();
+  const [catalogo, setCatalogo] = useState([]);
+
+  // Los precios salen del catálogo real; si la API no responde, las tarjetas se muestran sin precio.
+  useEffect(() => {
+    let activo = true;
+    solicitar("/catalogos/destinos")
+      .then((datos) => {
+        if (activo && Array.isArray(datos)) setCatalogo(datos);
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  const destinos = useMemo(
+    () =>
+      destinosBase.map((destino) => {
+        const vivo = catalogo.find((item) => item.nombre === destino.titulo);
+        return { ...destino, id: vivo?.id ?? destino.id, precioBase: vivo?.precioBase ?? 0 };
+      }),
+    [catalogo],
+  );
+
+  useEffect(() => {
+    if (hash) document.querySelector(hash)?.scrollIntoView({ behavior: "smooth" });
+  }, [hash]);
+
   return (
-    <div className="flex-1 py-10 sm:py-14">
-      <div className="mx-auto w-[92%] max-w-[1100px]">
-        <section className="vidrio filo-aurora mb-10 overflow-hidden rounded-3xl p-7 sm:p-10">
-          <div className="max-w-[640px]">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-acento" aria-hidden="true" />
-              Aurora Viajes
-            </span>
-            <h1 className="mb-4.5 mt-3.5 font-display text-4xl font-bold leading-tight sm:text-5xl">
-              <span className="titulo-aurora">10 destinos que</span>{" "}
-              <em className="not-italic text-brillo">merecen</em>{" "}
-              <span className="titulo-aurora">tu próximo viaje</span>
-            </h1>
-            <p className="max-w-[52ch] text-[1.05rem] leading-relaxed text-texto-suave">
-              Seleccionamos experiencias con propósito: cultura, naturaleza y buena
-              comida en cada parada. Desliza el carrusel para conocer a dónde te
-              llevamos primero.
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link
-                to="/reservas"
-                className="rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40"
-              >
-                Reservar un viaje
-              </Link>
-              <Link
-                to="/recomendaciones"
-                className="vidrio rounded-xl px-5 py-3 text-sm font-semibold text-primario transition hover:-translate-y-0.5 hover:bg-white/80"
-              >
-                Pedir recomendaciones
-              </Link>
-            </div>
-          </div>
-        </section>
+    <div className="flex-1">
+      <section className="cielo relative -mt-20 flex min-h-[max(41rem,100svh)] flex-col justify-center overflow-hidden pb-44 pt-32 text-crema">
+        <SolRayado className="absolute right-[9%] top-28 h-28 w-28 sm:h-40 sm:w-40 lg:h-52 lg:w-52" />
+        <Nube className="animate-flotar absolute left-[4%] top-[26%] w-40 text-white/70 sm:w-60" />
+        <Nube className="animate-flotar absolute right-[30%] top-[13%] w-48 text-white/55 [animation-delay:-7s] sm:w-72" />
+        <Nube className="animate-flotar absolute -right-6 top-[54%] w-56 text-white/60 [animation-delay:-3s] sm:w-80" />
+        <SenderoDeVuelo className="absolute -left-6 bottom-16 hidden w-[44rem] max-w-[62%] lg:block" />
 
-        <Carousel items={destinos} />
+        <p
+          aria-hidden="true"
+          className="absolute left-8 top-1/2 hidden -translate-y-1/2 rotate-180 font-mono text-[0.7rem] uppercase tracking-[0.22em] text-white/90 [writing-mode:vertical-rl] 2xl:block"
+        >
+          Vuelos / Hoteles / Excursiones
+        </p>
 
-        <section className="mt-12 grid gap-5 sm:grid-cols-3" aria-label="Qué incluye cada reserva">
-          {ventajas.map((ventaja) => (
-            <article key={ventaja.titulo} className="vidrio vidrio-interactivo rounded-2xl p-6">
-              <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-acento-suave via-primario-suave to-brillo text-lg text-white shadow-md shadow-primario/25">
-                {ventaja.icono}
+        <div className="relative mx-auto w-[92%] max-w-300">
+          <p className="antetitulo text-white">Hola, somos Aurora Viajes. Una agencia —</p>
+
+          <h1 className="mt-6 text-[clamp(3.5rem,10.5vw,8.6rem)] leading-[1.05] tracking-[-0.02em] text-crema">
+            <span className="block">El mundo,</span>
+            <span className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-5">
+              <PaseDeAbordar className="w-[19.5rem] shrink-0 -rotate-2 sm:w-[23.5rem]" />
+              <span>
+                a tu <em className="italic">ritmo</em>.
               </span>
-              <h3 className="mt-4 font-display text-lg font-bold text-primario">{ventaja.titulo}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-texto-suave">{ventaja.texto}</p>
-            </article>
-          ))}
-        </section>
-      </div>
+            </span>
+          </h1>
+
+          <p className="mt-9 max-w-[46ch] text-lg leading-relaxed text-white/95 sm:text-xl">
+            Paquetes cerrados o viajes a la carta: vuelo, hotel y excursiones en una sola reserva.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link to="/reservas" className="boton-claro px-7 py-4 text-sm font-semibold no-underline">
+              Reservar ahora
+            </Link>
+            <Link to={{ pathname: "/", hash: "#destinos" }} className="boton-vidrio px-7 py-4 text-sm font-semibold no-underline">
+              Ver destinos
+            </Link>
+          </div>
+        </div>
+
+        <BordeDeNubes className="absolute inset-x-0 -bottom-px h-24 w-full text-fondo sm:h-36" />
+      </section>
+
+      <section className="bg-fondo py-20 sm:py-32" aria-label="Quiénes somos en breve">
+        <div className="mx-auto w-[92%] max-w-245">
+          <TextoRevelado partes={HISTORIA} className="text-[clamp(1.6rem,3.3vw,2.6rem)] leading-[1.28] tracking-[-0.035em] text-primario" />
+          <TextoRevelado partes={CIERRE} className="mt-10 text-[clamp(1.6rem,3.3vw,2.6rem)] leading-[1.28] tracking-[-0.035em] text-primario" />
+        </div>
+      </section>
+
+      <section id="destinos" className="scroll-mt-4 bg-fondo pb-24 sm:pb-36" aria-labelledby="destinos-titulo">
+        <div className="mx-auto w-[92%] max-w-300">
+          <Revelar className="mb-12 flex flex-wrap items-end justify-between gap-6 sm:mb-16">
+            <div>
+              <p className="antetitulo">Destinos</p>
+              <h2 id="destinos-titulo" className="mt-4 max-w-[14ch] text-[clamp(2.6rem,6vw,4.6rem)] leading-[1.03] tracking-[-0.03em]">
+                Diez lugares para <em className="titulo-enfasis">empezar</em>
+              </h2>
+            </div>
+            <p className="max-w-[38ch] leading-relaxed text-texto-suave">
+              Elige uno y arma tu viaje: un paquete listo o a la carta, con precio por pasajero desde el primer paso.
+            </p>
+          </Revelar>
+          <DestinosGrid items={destinos} />
+        </div>
+      </section>
+
+      <section className="bg-arena py-24 sm:py-36" aria-labelledby="pasos-titulo">
+        <div className="mx-auto w-[92%] max-w-300">
+          <Revelar>
+            <p className="antetitulo">Cómo funciona</p>
+            <h2 id="pasos-titulo" className="mt-4 text-[clamp(2.6rem,6vw,4.6rem)] leading-[1.03] tracking-[-0.03em]">
+              Tres pasos y a volar
+            </h2>
+          </Revelar>
+
+          <ol className="mt-14 grid list-none gap-6 p-0 md:mt-20 md:grid-cols-3">
+            {PASOS.map((paso, indice) => (
+              <Revelar as="li" key={paso.numero} retraso={indice * 120} className={indice === 1 ? "md:mt-12" : ""}>
+                <article
+                  className={`h-full rounded-[2.1rem] bg-fondo p-8 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_30px_50px_-34px_rgba(23,21,15,0.45)] transition-transform duration-500 ease-resorte hover:rotate-0 sm:p-9 ${paso.giro}`}
+                >
+                  <span className="font-display text-7xl leading-none text-acento-suave">{paso.numero}</span>
+                  <h3 className="mt-7 font-display text-[2rem] leading-tight">{paso.titulo}</h3>
+                  <p className="mt-3 leading-relaxed text-texto-suave">{paso.texto}</p>
+                  <p className="antetitulo mt-8">{paso.etiqueta}</p>
+                </article>
+              </Revelar>
+            ))}
+          </ol>
+        </div>
+      </section>
 
       <Sponsors />
     </div>

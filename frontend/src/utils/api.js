@@ -2,11 +2,17 @@ const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 export async function solicitar(ruta, opciones = {}) {
   const { headers: headersOpcionales = {}, ...opcionesFetch } = opciones;
+  // El token de la sesión se adjunta solo; quien llama puede pasar su propia cabecera Authorization.
+  const token = tokenActual();
   let respuesta;
   try {
     respuesta = await fetch(`${API_URL}${ruta}`, {
       ...opcionesFetch,
-      headers: { "Content-Type": "application/json", ...headersOpcionales },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headersOpcionales,
+      },
     });
   } catch {
     throw new Error("No se pudo conectar con el backend. Verifica que FastAPI esté ejecutándose.");
@@ -29,6 +35,14 @@ export async function solicitar(ruta, opciones = {}) {
   }
   if (!respuesta.ok) throw new Error(mensaje || "Ocurrió un error en la solicitud.");
   return datos;
+}
+
+function tokenActual() {
+  try {
+    return localStorage.getItem("aurora_token") || sessionStorage.getItem("aurora_token");
+  } catch {
+    return null;
+  }
 }
 
 export function guardarSesion(datos, persistir = false) {

@@ -1,4 +1,5 @@
 import json
+import os
 import ssl
 from typing import Annotated
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -8,7 +9,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Configuracion(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # AURORA_ENV_FILE="" desactiva la lectura del .env; los tests la usan para no tocar servicios reales.
+    model_config = SettingsConfigDict(env_file=os.getenv("AURORA_ENV_FILE", ".env") or None, env_file_encoding="utf-8", extra="ignore")
 
     nombre_app: str = "Aurora Viajes API"
     entorno: str = "desarrollo"
@@ -49,6 +51,8 @@ class Configuracion(BaseSettings):
     proveedor_ia_timeout: float = 20.0
     proveedor_ia_reintentos: int = 2
     stripe_secret_key: str | None = None
+    # Secreto de firma del webhook (Stripe -> Developers -> Webhooks). Sin él, el endpoint se niega a operar.
+    stripe_webhook_secret: str | None = None
     frontend_url: str = "http://localhost:5173"
 
     admin_email: str = "admin@auroraviajes.com"

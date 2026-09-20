@@ -14,8 +14,6 @@ RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
-# El servicio de riesgo carga modelos/riesgo_retraso.joblib con ruta relativa a /app.
-COPY modelos ./modelos
 
 # Ejecutar sin privilegios de root.
 RUN useradd --create-home --uid 10001 aurora && chown -R aurora:aurora /app

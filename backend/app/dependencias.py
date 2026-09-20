@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.core.base_datos import obtener_sesion
 from app.core.seguridad import decodificar_token
 from app.errores import NoAutenticado, PermisoDenegado, RecursoNoEncontrado
-from app.models.biblioteca import Destino, Reserva, User
+from app.models.dominio import Destino, Reserva, User
 
 
 SesionDep = Annotated[AsyncSession, Depends(obtener_sesion)]
@@ -106,3 +106,9 @@ async def reserva_de_ruta(sesion: SesionDep, reserva_id: Annotated[int, Path(ge=
 
 
 ReservaDeRuta = Annotated[Reserva, Depends(reserva_de_ruta)]
+
+
+def exigir_acceso_a_reserva(usuario: User, reserva: Reserva) -> None:
+    """El personal ve todas las reservas; un cliente, solo las suyas."""
+    if usuario.role.nombre not in {"administrador", "empleado"} and reserva.usuario_id != usuario.id:
+        raise PermisoDenegado("No tiene permiso para realizar esta operación.")

@@ -1,187 +1,151 @@
-"""Fixtures compartidas por toda la batería de pruebas."""
+"""Fixtures compartidas por la batería de pruebas.
 
-import asyncio
-import json
+Las variables de entorno se fijan ANTES de importar la aplicación: los tests no
+leen `backend/.env` (que puede traer credenciales reales de Aiven, SMTP, Stripe
+o Groq) y trabajan sobre una SQLite temporal.
+"""
 
-import httpx
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
+import itertools
+import os
+import tempfile
+from datetime import date, timedelta
+from pathlib import Path
+from types import SimpleNamespace
 
-from app.core.base_datos import Base, obtener_sesion
-from app.core.seguridad import hashear_contrasena
-from app.main import app
-from app.models.biblioteca import Destino, Pais, TipoDocumento, User, Role, Permiso
-from app.services.recomendaciones import ServicioDeRecomendaciones
+os.environ.update({
+    "AURORA_ENV_FILE": "",
+    "SECRET_KEY": "clave-de-pruebas-" + "x" * 32,
+    "MOTOR_BD": "sqlite",
+    "SQLITE_PATH": str(Path(tempfile.mkdtemp(prefix="aurora-tests-")) / "pruebas.db"),
+    "DATABASE_URL": "",
+    "DEPURACION": "false",
+    "ADMIN_EMAIL": "admin@auroraviajes.com",
+    "ADMIN_PASSWORD": "Admin123!",
+    "SMTP_HOST": "",
+    "SMTP_USER": "",
+    "SMTP_PASSWORD": "",
+    "STRIPE_SECRET_KEY": "",
+    "STRIPE_WEBHOOK_SECRET": "",
+    "PROVEEDOR_IA_API_KEY": "",
+})
 
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
-@pytest.fixture
-def motor_prueba():
-    motor = create_async_engine(
-        'sqlite+aiosqlite:///:memory:',
-        connect_args={'check_same_thread': False},
-        poolclass=StaticPool,
-    )
-    yield motor
+from app.core.configuracion import configuracion  # noqa: E402
 
+# Salvaguarda: si la configuración apuntara a un servicio real, se aborta antes de arrancar la app.
+assert configuracion.url_base_datos.startswith("sqlite"), "Los tests solo pueden usar SQLite"
+assert not (configuracion.smtp_host or configuracion.stripe_secret_key or configuracion.proveedor_ia_api_key), (
+    "Los tests no deben tener credenciales de SMTP, Stripe ni IA"
+)
 
-@pytest.fixture
-def fabrica_sesiones(motor_prueba):
-    return async_sessionmaker(bind=motor_prueba, expire_on_commit=False)
+from app.core.limitador import limitador  # noqa: E402
+from app.main import app  # noqa: E402
 
-
-@pytest.fixture
-def cliente(motor_prueba, fabrica_sesiones):
-    async def sesion_de_prueba():
-        async with fabrica_sesiones() as sesion:
-            yield sesion
-
-    app.dependency_overrides[obtener_sesion] = sesion_de_prueba
-    prueba = TestClient(app, raise_server_exceptions=False)
-
-    async def preparar():
-        async with motor_prueba.begin() as conexion:
-            await conexion.run_sync(Base.metadata.create_all)
-
-        async with fabrica_sesiones() as sesion:
-            categoria = Categoria(nombre='novela')
-            tecnica = Categoria(nombre='tecnica')
-            autor = Autor(nombre='Autora De Prueba', nacionalidad='Colombiana')
-            sesion.add_all([categoria, tecnica, autor])
-            await sesion.flush()
-            sesion.add_all([
-                Libro(
-                    titulo='Libro Disponible',
-                    isbn='9780000000001',
-                    anio_publicacion=2020,
-                    ejemplares_totales=2,
-                    ejemplares_disponibles=2,
-                    autor_id=autor.id,
-                    categoria_id=categoria.id,
-                ),
-                Libro(
-                    titulo='Libro Tercero',
-                    isbn='9780000000003',
-                    anio_publicacion=2015,
-                    ejemplares_totales=4,
-                    ejemplares_disponibles=4,
-                    autor_id=autor.id,
-                    categoria_id=categoria.id,
-                ),
-                Libro(
-                    titulo='Libro Cuarto',
-                    isbn='9780000000004',
-                    anio_publicacion=2012,
-                    ejemplares_totales=4,
-                    ejemplares_disponibles=4,
-                    autor_id=autor.id,
-                    categoria_id=categoria.id,
-                ),
-                Libro(
-                    titulo='Libro Agotado',
-                    isbn='9780000000009',
-                    anio_publicacion=2018,
-                    ejemplares_totales=1,
-                    ejemplares_disponibles=0,
-                    autor_id=autor.id,
-                    categoria_id=tecnica.id,
-                ),
-                Socio(
-                    documento='1000000001',
-                    nombre='Socia De Prueba',
-                    email='socia@example.com',
-                    activo=True,
-                    rol='socio',
-                    contrasena_hash=hashear_contrasena('Clave2026*'),
-                ),
-                Socio(
-                    documento='1000000002',
-                    nombre='Bibliotecario De Prueba',
-                    email='biblio@example.com',
-                    activo=True,
-                    rol='bibliotecario',
-                    contrasena_hash=hashear_contrasena('Clave2026*'),
-                ),
-                Socio(
-                    documento='1000000003',
-                    nombre='Socia Inactiva',
-                    email='inactiva@example.com',
-                    activo=False,
-                    rol='socio',
-                    contrasena_hash=hashear_contrasena('Clave2026*'),
-                ),
-            ])
-            await sesion.commit()
-
-    asyncio.run(preparar())
-    with prueba:
-        yield prueba
-    app.dependency_overrides.clear()
+_contador = itertools.count(1)
 
 
-def _token(cliente, documento: str) -> str:
-    respuesta = cliente.post('/auth/token', data={'username': documento, 'password': 'Clave2026*'})
+@pytest.fixture(scope="session")
+def api():
+    with TestClient(app, raise_server_exceptions=False) as cliente:
+        yield cliente
+
+
+@pytest.fixture(autouse=True)
+def _limitador_limpio():
+    """Cada test parte sin intentos previos; el limitador vive en memoria y es global."""
+    limitador._eventos.clear()
+    yield
+
+
+@pytest.fixture(scope="session")
+def admin(api):
+    respuesta = api.post("/api/auth/login", json={"correo": "admin@auroraviajes.com", "contrasena": "Admin123!"})
     assert respuesta.status_code == 200, respuesta.text
-    return respuesta.json()['acceso']
+    return {"Authorization": f"Bearer {respuesta.json()['token']}"}
 
 
 @pytest.fixture
-def cabecera_socio(cliente):
-    return {'Authorization': f"Bearer {_token(cliente, '1000000001')}"}
+def crear_cliente(api):
+    """Registra un cliente nuevo y devuelve su id, correo y cabecera de sesión."""
+
+    def _crear():
+        n = next(_contador)
+        datos = {
+            "nombre": "Cliente", "apellido": f"Prueba{n}", "tipoDocumento": "CC",
+            "numeroDocumento": str(2_000_000_000 + n), "direccion": "Calle 1 # 2", "telefono": "3001112233",
+            "correo": f"cliente{n}@example.com", "contrasena": "Cliente1!",
+        }
+        assert api.post("/api/usuarios/registro", json=datos).status_code == 201
+        respuesta = api.post("/api/auth/login", json={"correo": datos["correo"], "contrasena": datos["contrasena"]})
+        assert respuesta.status_code == 200, respuesta.text
+        return SimpleNamespace(
+            id=respuesta.json()["usuario"]["id"], correo=datos["correo"],
+            headers={"Authorization": f"Bearer {respuesta.json()['token']}"},
+        )
+
+    return _crear
 
 
 @pytest.fixture
-def cabecera_bibliotecario(cliente):
-    return {'Authorization': f"Bearer {_token(cliente, '1000000002')}"}
+def viaje(api, admin):
+    """Un vuelo, un hotel, excursiones y un paquete de París con fechas relativas a hoy.
+
+    Los datos sembrados llevan fechas fijas que acaban en el pasado; así las
+    pruebas no caducan.
+    """
+    destino = next(d for d in api.get("/api/catalogos/destinos").json() if d["nombre"].startswith("París"))
+    salida = date.today() + timedelta(days=45 + next(_contador))
+    vuelo = api.post("/api/vuelos", headers=admin, json={
+        "aerolinea": "Aurora Airlines", "avion": "Airbus A320", "origen": "Bogotá", "destino": "París",
+        "fechaSalida": f"{salida}T08:00:00", "fechaLlegada": f"{salida}T23:00:00",
+    })
+    assert vuelo.status_code == 201, vuelo.text
+    opciones = api.get(f"/api/catalogos/destinos/{destino['id']}/opciones").json()
+    hotel = opciones["hoteles"][0]
+    excursiones = opciones["excursiones"][:2]
+    paquete = api.post("/api/paquetes", headers=admin, json={
+        "nombre": f"Paquete de prueba {salida}", "destinoId": destino["id"], "vueloId": vuelo.json()["id"],
+        "hotelId": hotel["id"], "excursionIds": [e["id"] for e in excursiones],
+        "fechaSalida": str(salida), "fechaRegreso": str(salida + timedelta(days=6)), "precioBase": 1_000_000,
+    })
+    assert paquete.status_code == 201, paquete.text
+    return SimpleNamespace(destino=destino, vuelo=vuelo.json(), hotel=hotel, excursiones=excursiones, paquete=paquete.json(), salida=salida)
 
 
-class ModeloFalso:
-    version = 'modelo-de-prueba'
-
-    def predecir(self, variables: dict) -> float:
-        return min(0.05 + variables['dias_prestamo'] * 0.03, 0.99)
-
-    @staticmethod
-    def clasificar(probabilidad: float) -> tuple[str, str]:
-        if probabilidad < 0.35:
-            return 'bajo', 'Préstamo estándar.'
-        if probabilidad < 0.65:
-            return 'medio', 'Enviar recordatorio.'
-        return 'alto', 'Acortar el plazo.'
+def cuerpo_de_reserva(viaje, modo="paquete", pasajeros=2, regreso=None):
+    """Cuerpo de POST/PUT /api/reservas para un viaje: `paquete` o `carta`."""
+    cuerpo = {
+        "origen": "Bogotá", "destinoId": viaje.destino["id"], "vueloId": viaje.vuelo["id"],
+        "fechaSalida": str(viaje.salida), "fechaRegreso": str(regreso or viaje.salida + timedelta(days=6)),
+        "pasajeros": pasajeros, "telefonoContacto": "3001112233",
+    }
+    if modo == "paquete":
+        cuerpo["paqueteId"] = viaje.paquete["id"]
+    else:
+        cuerpo["hotelId"] = viaje.hotel["id"]
+        cuerpo["excursionIds"] = [e["id"] for e in viaje.excursiones]
+    return cuerpo
 
 
 @pytest.fixture
-def modelo_falso():
-    app.state.servicio_riesgo = ModeloFalso()
-    app.dependency_overrides[obtener_servicio_riesgo] = lambda: app.state.servicio_riesgo
-    yield
-    app.dependency_overrides.pop(obtener_servicio_riesgo, None)
-    app.state.servicio_riesgo = None
+def reservar(api):
+    """reservar(cliente, viaje, modo, pasajeros) -> (id, respuesta JSON)."""
+
+    def _reservar(cliente, viaje, modo="paquete", pasajeros=2):
+        respuesta = api.post("/api/reservas", headers=cliente.headers, json=cuerpo_de_reserva(viaje, modo, pasajeros))
+        assert respuesta.status_code == 201, respuesta.text
+        return respuesta.json()["id"], respuesta.json()
+
+    return _reservar
 
 
 @pytest.fixture
-def proveedor_ia_falso(monkeypatch):
-    def responder(peticion: httpx.Request) -> httpx.Response:
-        cuerpo = json.loads(peticion.content)
-        catalogo = json.loads(cuerpo['messages'][1]['content'].split('Catálogo disponible:')[1])
-        recomendaciones = [
-            {
-                'libro_id': libro['libro_id'],
-                'titulo': libro['titulo'],
-                'motivo': 'Coincide con los intereses indicados.',
-            }
-            for libro in catalogo[:3]
-        ]
-        return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps(recomendaciones)}}]})
+def venta_de(api, admin):
+    """venta_de(reserva_id) -> la venta enlazada a esa reserva, o None."""
 
-    from app.core.configuracion import configuracion
+    def _venta(reserva_id):
+        return next((v for v in api.get("/api/ventas", headers=admin).json() if v["reservaId"] == reserva_id), None)
 
-    monkeypatch.setattr(configuracion, 'proveedor_ia_api_key', 'clave-de-prueba')
-    cliente_http = httpx.AsyncClient(transport=httpx.MockTransport(responder))
-    app.state.cliente_http = cliente_http
-    app.state.servicio_recomendaciones = ServicioDeRecomendaciones(cliente_http)
-    yield
-    asyncio.run(cliente_http.aclose())
-    app.state.cliente_http = None
-    app.state.servicio_recomendaciones = None
+    return _venta

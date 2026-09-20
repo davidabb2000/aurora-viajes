@@ -41,3 +41,9 @@ class DemasiadasPeticiones(ErrorDeDominio):
         super().__init__(
             f"Demasiados intentos. Espera {segundos_restantes} segundos antes de volver a intentarlo."
         )
+
+
+class ServicioNoDisponible(ErrorDeDominio):
+    """Una integración necesaria no está configurada o no responde."""
+
+    codigo = "servicio_no_disponible"

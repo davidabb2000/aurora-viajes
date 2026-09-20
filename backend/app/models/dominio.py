@@ -292,6 +292,8 @@ class Venta(Base):
     id: Mapped[int] = mapped_column(MySQLInteger(unsigned=True), primary_key=True)
     cliente_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    # Enlace con la reserva que originó la venta (nulo en ventas de mostrador y en las anteriores a esta columna).
+    reserva_id: Mapped[int | None] = mapped_column(ForeignKey("reservas.id", ondelete="SET NULL"), unique=True, nullable=True)
     subtotal: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     descuento: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     impuestos: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)

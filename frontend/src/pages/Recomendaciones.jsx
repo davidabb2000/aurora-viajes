@@ -47,12 +47,9 @@ function Recomendaciones() {
 
   return (
     <main className="mx-auto w-[92%] max-w-275 flex-1 py-12 sm:py-16">
-      <section className="vidrio filo-aurora rounded-3xl p-7 sm:p-10">
+      <section className="vidrio rounded-3xl p-7 sm:p-10">
         <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-brillo" aria-hidden="true" />
-            IA de viajes
-          </span>
+          <span className="antetitulo">IA de viajes</span>
           <h1 className="mt-3 font-display text-4xl font-bold sm:text-5xl">
             <span className="titulo-aurora">Recomendaciones de destinos</span>
           </h1>
@@ -79,7 +76,7 @@ function Recomendaciones() {
           <button
             type="submit"
             disabled={cargando || intereses.trim().length < 10}
-            className="mt-6 w-full rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
+            className="mt-6 w-full rounded-xl boton-tinta px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {cargando ? "Buscando..." : "Obtener recomendaciones"}
           </button>
@@ -88,11 +85,11 @@ function Recomendaciones() {
           {aviso && <p className="vidrio-sutil mt-4 rounded-xl px-4 py-3 text-sm font-medium text-primario">{aviso}</p>}
         </form>
 
-        <aside className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primario-oscuro via-primario to-[#1b1350] p-7 text-white shadow-xl shadow-primario/30 sm:p-8">
+        <aside className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-marino via-marino-profundo to-[#020a17] p-7 text-white sm:p-8">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 opacity-80"
-            style={{ background: "radial-gradient(24rem 18rem at 100% 0%, rgba(110,231,220,0.3), transparent 60%), radial-gradient(22rem 18rem at 0% 100%, rgba(214,51,108,0.32), transparent 62%)" }}
+            style={{ background: "radial-gradient(26rem 20rem at 100% 0%, rgba(208,81,42,0.34), transparent 62%), radial-gradient(22rem 18rem at 0% 100%, rgba(255,255,255,0.10), transparent 62%)" }}
           />
           <span className="relative inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-acento-suave backdrop-blur-sm">
             Tu asesor virtual
@@ -119,7 +116,7 @@ function Recomendaciones() {
           <h2 className="font-display text-2xl font-bold text-primario">Sugerencias para ti</h2>
           <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {recomendaciones.map((destino) => (
-              <article key={destino.destino_id} className="vidrio vidrio-interactivo filo-aurora flex flex-col rounded-2xl p-5">
+              <article key={destino.destino_id} className="vidrio vidrio-interactivo flex flex-col rounded-2xl p-5">
                 <p className="text-xs font-semibold uppercase tracking-widest text-primario-suave">
                   {destino.pais}
                 </p>
@@ -163,7 +160,7 @@ function Recomendaciones() {
                 )}
                 <Link
                   to="/reservas"
-                  className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primario/25 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento"
+                  className="mt-5 inline-flex w-full items-center justify-center rounded-xl boton-tinta px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento"
                 >
                   Reservar este destino
                 </Link>

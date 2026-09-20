@@ -29,5 +29,4 @@ class PQRActualizacion(BaseModel):
 
 class ChatEntrada(BaseModel):
     mensaje: str = Field(min_length=1, max_length=2000)
-    historial: list[dict[str, str]] = Field(default_factory=list, max_length=20)
     conversacion_id: int | None = Field(default=None, gt=0)

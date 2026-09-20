@@ -1,40 +1,65 @@
 @import "tailwindcss";
 
-@import "@fontsource/fraunces/600.css";
-@import "@fontsource/fraunces/700.css";
-@import "@fontsource/fraunces/600-italic.css";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
+@import "@fontsource/dm-serif-display/400.css";
+@import "@fontsource/dm-serif-display/400-italic.css";
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
 
 @theme {
-  /* Paleta "Aurora Boreal": indigo profundo, aqua y magenta sobre lavanda claro.
-     Las paginas usan estos tokens semanticos (primario, acento, superficie...),
-     asi que cambiarlos aqui reviste toda la aplicacion de forma coherente. */
-  --color-primario: #3f2fa8;
-  --color-primario-oscuro: #241a63;
-  --color-primario-suave: #6b5bd6;
-  --color-acento: #0e9e92;
-  --color-acento-suave: #6ee7dc;
-  --color-brillo: #d6336c;
-  --color-brillo-suave: #ff8fb6;
-  --color-fondo: #f2f1fd;
-  --color-superficie: #ffffff;
-  --color-texto: #1a1733;
-  --color-texto-suave: #57527e;
-  --color-borde: #e0dbf7;
+  /* Paleta "Cielo y papel": una hoja crema como base, tinta casi negra para lo
+     que se pulsa, y dos golpes de color (oro y coral) para lo que se celebra.
+     El cielo azul solo aparece en la portada. Las paginas usan tokens
+     semanticos (primario, acento, fondo, superficie...), asi que cambiar los
+     valores aqui reviste toda la aplicacion. */
+  --color-primario: #0a0a0f;
+  --color-primario-oscuro: #000000;
+  --color-primario-suave: #4a473f;
+  --color-acento: #d4472a;
+  --color-acento-suave: #fc9073;
+  --color-brillo: #b23a20;
+  --color-brillo-suave: #fc9073;
+  --color-oro: #ffda3f;
+  --color-cielo: #71b7f4;
+  --color-cielo-profundo: #5788b3;
+  --color-marino: #111c36;
+  --color-marino-profundo: #031835;
+  --color-fondo: #fff9f1;
+  --color-superficie: #fffdf8;
+  --color-crema: #fff9e9;
+  --color-arena: #eee8d2;
+  --color-texto: #17150f;
+  --color-texto-suave: #5f5a4d;
+  --color-borde: #e7dfcd;
 
-  /* Capa de vidrio: translucidez, desenfoque y brillo del borde. */
-  --color-vidrio: rgba(255, 255, 255, 0.62);
-  --color-vidrio-fuerte: rgba(255, 255, 255, 0.82);
-  --color-vidrio-borde: rgba(255, 255, 255, 0.85);
-  --color-vidrio-noche: rgba(36, 26, 99, 0.55);
+  /* Capa de papel: crema translucido con un canto tenue. */
+  --color-vidrio: rgba(255, 253, 248, 0.78);
+  --color-vidrio-fuerte: rgba(255, 253, 248, 0.94);
+  --color-vidrio-borde: rgba(23, 21, 15, 0.1);
+  --color-vidrio-noche: rgba(255, 255, 255, 0.07);
 
-  --font-display: "Fraunces", "Georgia", serif;
-  --font-cuerpo: "Inter", "Segoe UI", sans-serif;
+  --font-display: "DM Serif Display", "Georgia", serif;
+  --font-cuerpo: "Space Grotesk", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
 
-  --sombra-vidrio: 0 24px 60px -32px rgba(36, 26, 99, 0.55);
-  --sombra-vidrio-alta: 0 34px 80px -34px rgba(36, 26, 99, 0.6);
+  /* Esquinas generosas, como las piezas de papel recortado. */
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2.25rem;
+
+  /* Resorte con rebote para los gestos pequenos; salida suave para las entradas. */
+  --ease-resorte: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-salida: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --sombra-vidrio: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 1px 2px rgba(23, 21, 15, 0.04), 0 24px 48px -32px rgba(23, 21, 15, 0.35);
+  --sombra-vidrio-alta: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 2px 4px rgba(23, 21, 15, 0.05), 0 36px 64px -32px rgba(23, 21, 15, 0.42);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -44,25 +69,42 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Halos de color fijos detras de todo: son los que el vidrio refracta.
-   Van en un pseudo-elemento para no interferir con el scroll de la pagina. */
-body::before {
+/* Grano fino sobre todo el papel: le quita el acabado plano de pantalla. */
+body::after {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 41;
   pointer-events: none;
-  background:
-    radial-gradient(52rem 42rem at 8% -6%, rgba(110, 231, 220, 0.5), transparent 62%),
-    radial-gradient(46rem 40rem at 96% 2%, rgba(214, 51, 108, 0.28), transparent 60%),
-    radial-gradient(60rem 48rem at 50% 108%, rgba(63, 47, 168, 0.35), transparent 62%),
-    radial-gradient(38rem 34rem at 82% 62%, rgba(14, 158, 146, 0.26), transparent 65%);
+  opacity: 0.16;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23r)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+::selection {
+  background: var(--color-oro);
+  color: var(--color-primario);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primario);
+  outline-offset: 3px;
+}
+
+/* La serif de display solo tiene peso 400: sin esto el navegador fabricaria una
+   negrita falsa en los titulares que llevan font-bold. */
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  font-synthesis: none;
 }
 
 h1,
 h2,
 h3 {
-  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
 }
 
 #root {
@@ -72,72 +114,195 @@ h3 {
 }
 
 @layer components {
-  /* Panel de vidrio estandar: lo usan tarjetas, formularios y secciones. */
+  /* Panel de papel estandar: lo usan tarjetas, formularios y secciones. */
   .vidrio {
     background: var(--color-vidrio);
-    backdrop-filter: blur(20px) saturate(170%);
-    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
     border: 1px solid var(--color-vidrio-borde);
-    box-shadow: var(--sombra-vidrio), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    box-shadow: var(--sombra-vidrio);
   }
 
   /* Variante mas opaca para tablas y formularios largos, donde el texto manda. */
   .vidrio-solido {
     background: var(--color-vidrio-fuerte);
-    backdrop-filter: blur(24px) saturate(150%);
-    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    backdrop-filter: blur(18px) saturate(120%);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
     border: 1px solid var(--color-vidrio-borde);
-    box-shadow: var(--sombra-vidrio), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    box-shadow: var(--sombra-vidrio);
   }
 
-  /* Vidrio sobre fondos oscuros: cabecera del panel, pie de pagina, barra lateral. */
+  /* Vidrio sobre fondos oscuros: barra lateral y tarjetas nocturnas. */
   .vidrio-noche {
     background: var(--color-vidrio-noche);
-    backdrop-filter: blur(22px) saturate(160%);
-    -webkit-backdrop-filter: blur(22px) saturate(160%);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    box-shadow: var(--sombra-vidrio), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
   }
 
-  /* Vidrio tenue para elementos anidados dentro de otro panel. */
+  /* Papel arena para elementos anidados dentro de otro panel. */
   .vidrio-sutil {
-    background: rgba(255, 255, 255, 0.45);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
+    background: rgba(238, 232, 210, 0.5);
+    border: 1px solid rgba(23, 21, 15, 0.06);
   }
 
   /* Realce al pasar el cursor, para tarjetas que son enlaces o acciones. */
   .vidrio-interactivo {
-    transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+    transition: transform 0.4s var(--ease-resorte), box-shadow 0.3s ease, background 0.25s ease;
   }
 
   .vidrio-interactivo:hover {
-    transform: translateY(-3px);
+    transform: translateY(-4px);
     background: var(--color-vidrio-fuerte);
-    box-shadow: var(--sombra-vidrio-alta), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    box-shadow: var(--sombra-vidrio-alta);
   }
 
-  /* Titular con degradado de la aurora. */
+  /* Titular en tinta. */
   .titulo-aurora {
-    background-image: linear-gradient(110deg, var(--color-primario-oscuro) 0%, var(--color-primario) 42%, var(--color-acento) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--color-primario);
   }
 
-  /* Borde superior de color que remata las tarjetas destacadas. */
-  .filo-aurora {
-    position: relative;
-    overflow: hidden;
+  /* Palabra destacada dentro de un titular: cursiva de la serif y coral. */
+  .titulo-enfasis {
+    font-style: italic;
+    color: var(--color-acento);
   }
 
-  .filo-aurora::before {
+  /* Antetitulo: etiqueta corta en mono con un punto dorado delante. */
+  .antetitulo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-texto-suave);
+  }
+
+  .antetitulo::before {
     content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--color-acento-suave), var(--color-primario-suave), var(--color-brillo-suave));
+    flex: none;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 9999px;
+    background: var(--color-oro);
+    box-shadow: 0 0 0 3px rgba(255, 218, 63, 0.28);
+  }
+
+  /* Botones: siempre en pildora. El !important es a proposito: el marcado
+     antiguo los combina con rounded-xl y text-white sueltos. */
+  .boton-tinta {
+    background: var(--color-primario);
+    color: var(--color-crema) !important;
+    border-radius: 9999px !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.14) inset, 0 12px 24px -16px rgba(10, 10, 15, 0.75);
+    transition: background 0.2s ease, transform 0.4s var(--ease-resorte), box-shadow 0.25s ease;
+  }
+
+  .boton-tinta:hover:not(:disabled) {
+    background: #000;
+    transform: translateY(-2px);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.14) inset, 0 18px 30px -16px rgba(10, 10, 15, 0.85);
+  }
+
+  .boton-tinta:disabled {
+    background: var(--color-primario-suave);
+    opacity: 0.7;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  /* Accion principal: dorado con tinta encima. */
+  .boton-acento {
+    background: var(--color-oro);
+    color: var(--color-primario) !important;
+    border-radius: 9999px !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 12px 24px -16px rgba(150, 110, 0, 0.85);
+    transition: filter 0.2s ease, transform 0.4s var(--ease-resorte), box-shadow 0.25s ease;
+  }
+
+  .boton-acento:hover:not(:disabled) {
+    filter: brightness(1.05);
+    transform: translateY(-2px);
+  }
+
+  .boton-acento:disabled {
+    opacity: 0.55;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  /* Pildora blanca: para la accion principal sobre el cielo. */
+  .boton-claro {
+    background: #fff;
+    color: #060606;
+    border-radius: 9999px;
+    transition: transform 0.4s var(--ease-resorte), box-shadow 0.25s ease;
+    box-shadow: 0 12px 26px -16px rgba(3, 24, 53, 0.7);
+  }
+
+  .boton-claro:hover {
+    transform: translateY(-2px);
+  }
+
+  /* Pildora de vidrio: la accion secundaria sobre el cielo. */
+  .boton-vidrio {
+    background: rgba(255, 255, 255, 0.2);
+    border: 0.8px solid rgba(255, 255, 255, 0.5);
+    color: #fff;
+    border-radius: 9999px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: inset 0 4px 6px rgba(255, 255, 255, 0.25);
+    transition: background 0.2s ease, transform 0.4s var(--ease-resorte);
+  }
+
+  .boton-vidrio:hover {
+    background: rgba(255, 255, 255, 0.34);
+    transform: translateY(-2px);
+  }
+
+  /* Barra de navegacion flotante. Sobre el cielo es de vidrio claro; al hacer
+     scroll (o fuera de la portada) pasa a tinta para que se lea sobre el papel. */
+  .pildora-nav {
+    background: rgba(255, 255, 255, 0.2);
+    border: 0.8px solid rgba(255, 255, 255, 0.5);
+    color: #fff;
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    box-shadow: inset 0 4px 6px rgba(255, 255, 255, 0.25);
+    transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+  }
+
+  .pildora-nav[data-oscura="true"] {
+    background: rgba(10, 10, 15, 0.88);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: var(--color-crema);
+    box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.7);
+  }
+
+  /* Cielo de la portada: el mismo degradado radial de la referencia, con un
+     resplandor dorado en el horizonte. */
+  .cielo {
+    background:
+      linear-gradient(180deg, transparent 58%, rgba(255, 218, 63, 0.2) 100%),
+      radial-gradient(1000px 1340px at 68.65% 23.5%, var(--color-cielo) 0%, var(--color-cielo-profundo) 100%);
+  }
+
+  /* Aparicion al hacer scroll. Solo se oculta si hay JavaScript (la clase js
+     la pone index.html), asi que sin JS el contenido siempre se ve. */
+  .js .revelar {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.8s var(--ease-salida), transform 0.8s var(--ease-salida);
+    transition-delay: var(--retraso, 0ms);
+  }
+
+  .js .revelar.visible {
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -151,33 +316,74 @@ h3 {
   }
 }
 
-@keyframes flotar-aurora {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
+@keyframes flotar {
+  from {
+    transform: translateX(-3%);
   }
 
-  50% {
-    transform: translate3d(0, -14px, 0) scale(1.04);
+  to {
+    transform: translateX(3%);
+  }
+}
+
+@keyframes girar-lento {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes dibujar {
+  from {
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes avanzar {
+  from {
+    left: 4%;
+  }
+
+  to {
+    left: 92%;
   }
 }
 
 @theme {
   --animate-desplazar-logos: desplazar-logos 75s linear infinite;
-  --animate-flotar-aurora: flotar-aurora 14s ease-in-out infinite;
+  --animate-flotar: flotar 16s ease-in-out infinite alternate;
+  --animate-girar-lento: girar-lento 90s linear infinite;
+  --animate-avanzar: avanzar 5s var(--ease-salida) infinite alternate;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   * {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 
   .animate-desplazar-logos {
-    animation-duration: 75s !important;
+    animation: none !important;
   }
 
-  .vidrio-interactivo:hover {
+  .js .revelar {
+    opacity: 1;
+    transform: none;
+  }
+
+  .vidrio-interactivo:hover,
+  .boton-tinta:hover:not(:disabled),
+  .boton-acento:hover:not(:disabled),
+  .boton-claro:hover,
+  .boton-vidrio:hover {
     transform: none;
   }
 }

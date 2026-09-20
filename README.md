@@ -1,119 +1,106 @@
 # Aurora Viajes
 
-Proyecto full stack con **React + Vite** en `frontend/` y **FastAPI** en `backend/`.
+Agencia de viajes en línea. El cliente reserva un **paquete cerrado** o arma su viaje **a la carta** (vuelo + hotel + excursiones), paga con Stripe y sigue su reserva desde un panel. El personal gestiona vuelos, paquetes, reservas, facturas y reportes.
 
-## Backend
+| Pieza | Tecnología | Dónde corre |
+|---|---|---|
+| `frontend/` | React 19, Vite, Tailwind 4, React Router | Cloudflare |
+| `backend/` | FastAPI, SQLAlchemy async, Pydantic | Railway (Docker) |
+| Base de datos | MySQL | Aiven (plan gratuito) |
 
-El backend usa MySQL/XAMPP con base `aurora_viajes`, con un esquema normalizado y el contrato que espera el frontend.
+Guías: **[DESPLIEGUE.md](DESPLIEGUE.md)** (producción, variables, Stripe, costes) y **[INTEGRACION_FULL_STACK.md](INTEGRACION_FULL_STACK.md)** (cómo se conectan las piezas).
 
-Los precios de reserva se calculan por destino, pasajeros y duración del viaje.
+## Estructura
 
-### Tablas principales
+```
+backend/
+├── app/
+│   ├── main.py          # ensambla la app: ciclo de vida, formato de errores, routers
+│   ├── core/            # configuración, base de datos, JWT y hash, limitador de peticiones
+│   ├── models/          # dominio.py: tablas
+│   ├── schemas/         # validación de las entradas (Pydantic)
+│   ├── routers/         # un archivo por tema: auth, usuarios, catalogo, viajes, reservas,
+│   │                    # pagos, comercial (ventas, reportes, PQR, chatbot), contacto, recomendaciones
+│   └── services/        # reglas de negocio: reservas, precios, pagos (Stripe), siembra y
+│                        # migraciones, correos, documentos PDF/XLSX, IA
+├── tests/               # pytest sobre una SQLite temporal (nunca lee .env)
+├── scripts/             # exportar_esquema.py, probar_smtp.py
+├── sql/schema.sql       # esquema MySQL, generado desde los modelos
+└── postman/             # colección del quinto avance
+frontend/src/
+├── pages/  components/  layouts/  context/  utils/  data/
+```
 
-- usuarios
-- roles
-- permisos
-- rol_permisos
-- tipos_documento
-- paises
-- destinos
-- estados_reserva
-- estados_pago
-- metodos_pago
-- productos
-- servicios
-- vuelos
-- hoteles
-- excursiones
-- paquetes
-- paquete_excursiones
-- reservas
-- mensajes_contacto
-- ventas
-- detalle_ventas
-- facturas
-- detalle_facturas
-- pqr
-- conversaciones
-- mensajes
+## Arranque local
 
-### Arranque
+Necesitas Python 3.12+, Node 22+ y, para desarrollar contra MySQL, XAMPP (o cualquier MySQL).
 
 ```powershell
+# Backend  ->  http://127.0.0.1:8001
 cd backend
 py -m venv .venv
 .venv\Scripts\Activate.ps1
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
-```
+pip install -r requirements-dev.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }   # edita SECRET_KEY y, si usas MySQL, sus datos
+uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 
-Si vas a recrear la base desde cero, importa antes `backend\sql\schema.sql` en phpMyAdmin.
-
-### Frontend
-
-```powershell
+# Frontend  ->  http://localhost:5173  (Vite reenvía /api al backend)
 cd frontend
 npm install
 npm run dev
 ```
 
-## Integración
+Con `MOTOR_BD=sqlite` el backend funciona sin MySQL. Al arrancar crea las tablas, siembra destinos, vuelos, hoteles, excursiones, paquetes y roles, y deja creado el administrador (`ADMIN_EMAIL` / `ADMIN_PASSWORD`). No hace falta importar ningún `.sql`; `sql/schema.sql` existe solo para quien quiera crear la base a mano y se regenera con `python -m scripts.exportar_esquema`.
 
-El frontend llama a la API mediante `frontend/src/utils/api.js` y Vite redirige `/api` a `http://127.0.0.1:8001`.
+## Pruebas
 
-## Contrato principal
+```powershell
+cd backend
+pytest
+```
 
-- `POST /api/auth/login`
-- `POST /api/usuarios/registro`
-- `GET /api/productos`
-- `GET /api/servicios`
-- `GET /api/catalogos/destinos`
-- `GET /api/vuelos`
-- `GET /api/hoteles`
-- `GET /api/excursiones`
-- `GET /api/paquetes`
-- `POST /api/paquetes`
-- `POST /api/reservas`
-- `GET /api/reservas/mias`
-- `GET /api/reservas/{id}`
-- `PUT /api/reservas/{id}`
-- `POST /api/reservas/{id}/pago/checkout`
-- `POST /api/reservas/{id}/pago/confirmar`
-- `POST /api/contacto`
-- `POST /api/ventas`
-- `GET /api/ventas?desde=&hasta=&estado=&cliente_id=&producto_id=&servicio_id=`
-- `GET /api/reportes/ventas?fecha=&formato=json|pdf|xlsx`
-- `GET /api/facturas?numero=&cliente_id=&desde=&hasta=`
-- `GET /api/facturas/{id}/pdf`
-- `GET /api/estadisticas?periodo=dia|semana|mes&desde=&hasta=`
-- `POST /api/pqr`
-- `GET /api/pqr`
-- `PATCH /api/pqr/{id}`
-- `POST /api/chatbot`
+La suite fija sus variables de entorno antes de importar la app y aborta si la configuración apuntara a algo que no sea SQLite, así que no toca la base, el correo, Stripe ni la IA aunque tengas un `.env` real.
 
-## Observación
+## Contrato principal de la API
 
-El frontend sigue enviando el destino como texto; el backend lo guarda así para mantener compatibilidad con lo que ya existe en la interfaz y en el panel.
+Todas las rutas cuelgan de `/api`. Las marcadas con 🔒 exigen sesión (`Authorization: Bearer <token>`).
 
-### Quinto avance
+- **Sesión:** `POST /auth/login`, `POST /usuarios/registro`, `POST /auth/recuperar`, `POST /auth/restablecer`
+- **Catálogo:** `GET /catalogos/destinos`, `GET /catalogos/destinos/{id}/opciones`, 🔒 `GET /vuelos`, `/hoteles`, `/excursiones`, `/paquetes`
+- **Reservas 🔒:** `POST /reservas`, `GET /reservas/mias`, `GET|PUT|DELETE /reservas/{id}`, `PATCH /reservas/{id}/estado`
+- **Pagos 🔒:** `POST /reservas/{id}/pago/checkout`, `POST /reservas/{id}/pago/confirmar`; webhook de Stripe: `POST /pagos/stripe/webhook`
+- **Comercial 🔒:** `GET /ventas`, `GET /facturas`, `GET /facturas/{id}/pdf`, `GET /reportes/ventas?formato=json|pdf|xlsx`, `GET /estadisticas`, `POST|GET|PATCH /pqr`, `POST /chatbot`, `POST /destinos/recomendaciones`
+- **Contacto:** `POST /contacto`
+- **Salud:** `GET /api/health`
 
-El dashboard comercial está disponible en `/panel/avance-cinco` para usuarios autenticados. La colección importable de Postman está en `backend/postman/collections/aurora-quinto-avance.postman_collection.json`.
+Cada reserva crea sola su **venta** y su **factura**, enlazadas con ella: pagar la reserva completa la venta y cancelarla (o eliminarla, si no estaba pagada) la anula. `POST /ventas` es una venta de mostrador de productos y servicios y solo la registra el personal.
 
-Para IA y despliegue, configura las variables `PROVEEDOR_IA_API_KEY`, `PROVEEDOR_IA_URL`, `PROVEEDOR_IA_MODELO`, `ORIGENES_PERMITIDOS` y `FRONTEND_URL` en el entorno de ejecución. No incluyas claves reales en GitHub.
+## Precios
 
-### Despliegue
+El servidor calcula el precio; el cliente solo lo muestra.
 
-El backend y el frontend tienen cada uno su `Dockerfile` y su `railway.json`, y se despliegan como dos servicios separados en Railway contra una base MySQL gestionada.
+- **A la carta:** vuelo por pasajero (`precio_base` del destino) + hotel por noche y habitación (dos personas por habitación) + excursiones por pasajero.
+- **Paquete:** precio cerrado por pasajero; el hotel y las excursiones ya van incluidos y en la factura figuran a valor cero.
 
-El procedimiento completo, con las variables de cada servicio y una seccion sobre como gastar menos creditos, esta en **[DESPLIEGUE.md](DESPLIEGUE.md)**.
+El desglose se guarda en la reserva, así que un cambio posterior de tarifas no altera lo ya emitido.
 
-Resumen:
+## Variables de entorno (backend)
 
-- Servicio backend: raiz `backend`, escucha el puerto de `PORT` y expone `/api/health`. Crea el esquema y carga los datos iniciales al arrancar.
-- Servicio frontend: raiz `frontend`, nginx sirve el build de Vite en el puerto de `PORT`. `VITE_API_URL` se incrusta en tiempo de build, asi que cambiarla exige redesplegar.
-- Base de datos: servicio MySQL de Railway, referenciado desde el backend con `DATABASE_URL=${{MySQL.MYSQL_URL}}`. Tambien acepta un MySQL externo: normaliza la URL y activa TLS si el proveedor lo pide.
+Todas van en `backend/.env` en local y en las variables del servicio en Railway. Nunca se suben al repositorio; `backend/.env.example` lista las disponibles.
 
-No incluyas claves reales en el repositorio: van en las variables de cada servicio.
+| Variable | Uso |
+|---|---|
+| `SECRET_KEY` | Firma de los JWT. **Obligatoria**: sin ella la app no arranca. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Administrador inicial. La contraseña se vuelve a aplicar en cada arranque. |
+| `DATABASE_URL` o `MYSQL_*` | Conexión a la base (una URL de Aiven activa TLS sola). `MOTOR_BD=sqlite` para desarrollo sin MySQL. |
+| `ORIGENES_PERMITIDOS`, `FRONTEND_URL` | CORS y enlaces de retorno de Stripe. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Cobro y confirmación de pagos (el webhook exige su secreto). |
+| `PROVEEDOR_IA_API_KEY`, `_URL`, `_MODELO` | Recomendaciones y chatbot; sin clave hay respaldo local. |
+| `SMTP_*` | Correos de bienvenida, recuperación y reserva. |
+| `BD_SIN_POOL` | Sin conexiones ociosas, para que Railway Serverless pueda dormir el servicio. |
 
-En el flujo comercial de Aurora Viajes, la venta corresponde a una reserva de viaje: cada reserva nueva crea automáticamente una venta, un detalle con el destino y los pasajeros, y una factura. Los campos de producto y servicio se conservan en el modelo para compatibilidad con el requerimiento general, pero no son necesarios para operar este proyecto.
+En el frontend solo existe `VITE_API_URL` (URL del backend terminada en `/api`), que Vite incrusta al compilar.
+
+## Diseño del frontend
+
+Paleta de papel crema con tinta casi negra, oro y coral; cielo azul solo en la portada. Tipografías autoalojadas: DM Serif Display (titulares), Space Grotesk (texto) y JetBrains Mono (etiquetas). Los colores, radios, sombras y botones viven como tokens en `frontend/src/index.css`: cambiarlos ahí reviste toda la aplicación. Las animaciones respetan `prefers-reduced-motion`.

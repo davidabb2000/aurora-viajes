@@ -31,7 +31,7 @@ function Modal({ abierto, alCerrar, titulo, children }) {
       onClick={alCerrar}
     >
       <div
-        className="vidrio-solido filo-aurora max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl p-6 sm:p-8"
+        className="vidrio-solido max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl p-6 sm:p-8"
         onClick={(evento) => evento.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -42,7 +42,7 @@ function Modal({ abierto, alCerrar, titulo, children }) {
             type="button"
             onClick={alCerrar}
             aria-label="Cerrar"
-            className="shrink-0 rounded-full border border-white/60 bg-white/50 p-1.5 text-texto-suave transition hover:bg-white hover:text-primario"
+            className="shrink-0 rounded-full border border-primario/12 bg-white/50 p-1.5 text-texto-suave transition hover:bg-white hover:text-primario"
           >
             ✕
           </button>

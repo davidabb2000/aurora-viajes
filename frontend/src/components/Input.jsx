@@ -22,7 +22,7 @@ function Input({
     <label className="flex flex-col gap-1.5 text-sm font-medium text-texto">
       <span>
         {label}
-        {required && <span className="text-brillo"> *</span>}
+        {required && <span className="text-acento"> *</span>}
       </span>
       <span className="relative block">
         <input
@@ -39,7 +39,7 @@ function Input({
           className={`w-full rounded-xl border bg-white/70 px-3.5 py-2.5 text-[0.95rem] text-texto backdrop-blur-sm placeholder:text-texto-suave/60 outline-none transition focus:bg-white/90 focus:ring-3 ${
             error
               ? "border-red-400 focus:border-red-400 focus:ring-red-100"
-              : "border-white/70 shadow-sm shadow-primario/5 focus:border-primario-suave focus:ring-primario-suave/20"
+              : "border-primario/12 shadow-sm shadow-primario/5 focus:border-primario-suave focus:ring-primario-suave/20"
           } ${botonContrasena ? "pr-20" : ""}`}
         />
         {botonContrasena && (

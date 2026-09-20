@@ -22,7 +22,7 @@ const nochesEntre = (salida, regreso) => {
   return Math.max(1, dias);
 };
 
-const CAMPO = "mt-2 w-full rounded-xl border border-white/70 bg-white/70 px-3 py-3 font-normal text-texto shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20";
+const CAMPO = "mt-2 w-full rounded-xl border border-primario/12 bg-white/70 px-3 py-3 font-normal text-texto shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20";
 
 function Reservas() {
   const { sesion } = useAuth();
@@ -38,7 +38,7 @@ function Reservas() {
   const [cargandoOpciones, setCargandoOpciones] = useState(false);
   const [formulario, setFormulario] = useState({
     origen: "",
-    destinoId: "",
+    destinoId: new URLSearchParams(location.search).get("destino") || "",
     fechaSalida: "",
     fechaRegreso: "",
     vueloId: "",
@@ -56,21 +56,11 @@ function Reservas() {
   useEffect(() => {
     let activo = true;
     const cargarCatalogo = async () => {
+      // Los destinos son públicos y van solos: si fallan, se cae al listado estático;
+      // si falla cualquier otra llamada, los destinos ya cargados se conservan.
       try {
         const destinos = await solicitar("/catalogos/destinos");
         if (activo) setDestinosCatalogo(destinos);
-          const vuelosCatalogo = await solicitar("/vuelos", {
-            headers: sesion ? { Authorization: `Bearer ${sesion.token}` } : {},
-          });
-          if (activo) setVuelos(vuelosCatalogo);
-          const paquetesCatalogo = await solicitar("/paquetes", {
-            headers: sesion ? { Authorization: `Bearer ${sesion.token}` } : {},
-          });
-          if (activo) setPaquetes(paquetesCatalogo);
-          const reservasUsuario = await solicitar("/reservas/mias", {
-            headers: sesion ? { Authorization: `Bearer ${sesion.token}` } : {},
-          });
-          if (activo) setMisReservas(reservasUsuario);
       } catch {
         if (activo) {
           setDestinosCatalogo(
@@ -82,6 +72,17 @@ function Reservas() {
           );
         }
       }
+      if (!sesion) return;
+      const cabecera = { headers: { Authorization: `Bearer ${sesion.token}` } };
+      const [vuelosCatalogo, paquetesCatalogo, reservasUsuario] = await Promise.all([
+        solicitar("/vuelos", cabecera).catch(() => null),
+        solicitar("/paquetes", cabecera).catch(() => null),
+        solicitar("/reservas/mias", cabecera).catch(() => null),
+      ]);
+      if (!activo) return;
+      if (vuelosCatalogo) setVuelos(vuelosCatalogo);
+      if (paquetesCatalogo) setPaquetes(paquetesCatalogo);
+      if (reservasUsuario) setMisReservas(reservasUsuario);
     };
     cargarCatalogo();
     return () => {
@@ -119,9 +120,6 @@ function Reservas() {
     [destinosCatalogo],
   );
 
-  const normalizarTexto = (valor) =>
-    valor.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-
   const vuelosDisponibles = useMemo(
     () => vuelos.filter((vuelo) => vuelo.activo && ["programado", "abordando"].includes(vuelo.estado)
       && new Date(vuelo.fechaSalida) >= new Date()
@@ -129,6 +127,7 @@ function Reservas() {
     [formulario.pasajeros, vuelos],
   );
 
+  const paqueteElegido = paquetes.find((paquete) => paquete.id === Number(formulario.paqueteId)) || null;
   const destinoSeleccionado = destinosDisponibles.find((destino) => Number(destino.id) === Number(formulario.destinoId));
   const paquetesDisponibles = useMemo(
     () => paquetes.filter((paquete) => paquete.activo
@@ -165,7 +164,7 @@ function Reservas() {
     return { vuelo, hotel, excursiones: excursion, noches, total: vuelo + hotel + excursion };
   }, [formulario.pasajeros, formulario.fechaSalida, formulario.fechaRegreso, opciones, destinoSeleccionado, hotelElegido, excursionesElegidas]);
 
-  if (!sesion) return <Navigate to="/login" state={{ desde: location.pathname }} replace />;
+  if (!sesion) return <Navigate to="/login" state={{ desde: location.pathname + location.search }} replace />;
 
   const cambiar = (evento) => {
     const { name, value } = evento.target;
@@ -293,18 +292,15 @@ function Reservas() {
   const pestanaClase = (activa) =>
     `flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
       activa
-        ? "bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30"
+        ? "boton-tinta text-white"
         : "text-texto-suave hover:bg-white/60 hover:text-primario"
     }`;
 
   return (
     <main className="mx-auto w-[92%] max-w-275 flex-1 py-10 sm:py-14">
-      <section className="vidrio filo-aurora rounded-3xl p-7 sm:p-10">
+      <section className="vidrio rounded-3xl p-7 sm:p-10">
         <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-acento" aria-hidden="true" />
-            Planea con Aurora
-          </span>
+          <span className="antetitulo">Planea con Aurora</span>
           <h1 className="mt-3 font-display text-4xl font-bold sm:text-5xl">
             <span className="titulo-aurora">Reserva tu próxima historia</span>
           </h1>
@@ -374,8 +370,14 @@ function Reservas() {
                   <div className="vidrio-sutil grid gap-3 rounded-2xl p-4 text-sm sm:col-span-2 sm:grid-cols-3">
                     <p><span className="block text-xs font-semibold uppercase tracking-wide text-texto-suave">Salida</span><strong>{formulario.origen}</strong></p>
                     <p><span className="block text-xs font-semibold uppercase tracking-wide text-texto-suave">Destino</span><strong>{destinoSeleccionado?.nombre}</strong></p>
-                    <p><span className="block text-xs font-semibold uppercase tracking-wide text-texto-suave">Hotel</span><strong>{paquetes.find((paquete) => paquete.id === Number(formulario.paqueteId))?.hotel?.nombre}</strong></p>
+                    <p><span className="block text-xs font-semibold uppercase tracking-wide text-texto-suave">Hotel</span><strong>{paqueteElegido?.hotel?.nombre}</strong></p>
                     <p><span className="block text-xs font-semibold uppercase tracking-wide text-texto-suave">Fecha de salida</span><strong>{formulario.fechaSalida}</strong></p>
+                    <p className="sm:col-span-2">
+                      <span className="block text-xs font-semibold uppercase tracking-wide text-texto-suave">Precio del paquete</span>
+                      <strong>
+                        {formatearMoneda(paqueteElegido?.precioBase)} por persona · {formatearMoneda(Number(paqueteElegido?.precioBase || 0) * Number(formulario.pasajeros))} en total
+                      </strong>
+                    </p>
                   </div>
                 )}
               </>
@@ -440,14 +442,14 @@ function Reservas() {
                             className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 text-sm font-normal transition ${
                               activa
                                 ? "border-primario-suave/60 bg-white/85 shadow-md shadow-primario/15"
-                                : "border-white/70 bg-white/45 hover:bg-white/70"
+                                : "border-primario/12 bg-white/45 hover:bg-white/70"
                             }`}
                           >
                             <input
                               type="checkbox"
                               checked={activa}
                               onChange={() => alternarExcursion(excursion.id)}
-                              className="mt-0.5 h-4 w-4 rounded border-white/70 accent-primario"
+                              className="mt-0.5 h-4 w-4 rounded border-primario/12 accent-primario"
                             />
                             <span>
                               <strong className="block text-texto">{excursion.nombre}</strong>
@@ -528,7 +530,7 @@ function Reservas() {
           <button
             type="submit"
             disabled={cargando}
-            className="mt-6 w-full rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-5 py-3 font-semibold text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
+            className="mt-6 w-full rounded-xl boton-tinta px-5 py-3 font-semibold text-white disabled:opacity-60"
           >
             {cargando ? "Enviando solicitud..." : "Solicitar y continuar al pago"}
           </button>
@@ -539,7 +541,7 @@ function Reservas() {
         <div className="flex flex-col gap-6">
           {/* Desglose en vivo: el cliente ve por qué paga lo que paga antes de enviar. */}
           {modo === "carta" && formulario.destinoId && (
-            <section className="vidrio filo-aurora rounded-3xl p-6 sm:p-7" aria-live="polite">
+            <section className="vidrio rounded-3xl p-6 sm:p-7" aria-live="polite">
               <h2 className="font-display text-xl font-bold text-primario">Desglose estimado</h2>
               <dl className="mt-4 space-y-3 text-sm">
                 <div className="flex items-baseline justify-between gap-4">
@@ -556,7 +558,7 @@ function Reservas() {
                   <dt className="text-texto-suave">Excursiones · {excursionesElegidas.length} elegida(s)</dt>
                   <dd className="font-semibold text-texto">{formatearMoneda(desglose.excursiones)}</dd>
                 </div>
-                <div className="flex items-baseline justify-between gap-4 border-t border-white/70 pt-3">
+                <div className="flex items-baseline justify-between gap-4 border-t border-primario/12 pt-3">
                   <dt className="font-semibold text-primario">Total estimado</dt>
                   <dd className="font-display text-2xl font-bold text-primario">{formatearMoneda(desglose.total)}</dd>
                 </div>
@@ -567,11 +569,11 @@ function Reservas() {
             </section>
           )}
 
-          <aside className="relative flex-1 overflow-hidden rounded-3xl bg-gradient-to-br from-primario-oscuro via-primario to-[#1b1350] p-7 text-white shadow-xl shadow-primario/30 sm:p-8">
+          <aside className="relative flex-1 overflow-hidden rounded-3xl bg-gradient-to-br from-marino via-marino-profundo to-[#020a17] p-7 text-white sm:p-8">
             <div
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 opacity-80"
-              style={{ background: "radial-gradient(24rem 18rem at 100% 0%, rgba(110,231,220,0.3), transparent 60%), radial-gradient(22rem 18rem at 0% 100%, rgba(214,51,108,0.32), transparent 62%)" }}
+              style={{ background: "radial-gradient(26rem 20rem at 100% 0%, rgba(208,81,42,0.34), transparent 62%), radial-gradient(22rem 18rem at 0% 100%, rgba(255,255,255,0.10), transparent 62%)" }}
             />
             <span className="relative inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-acento-suave backdrop-blur-sm">
               Tu experiencia empieza aquí
@@ -613,16 +615,16 @@ function Reservas() {
               const desgloseReserva = reserva.desglose || {};
               const tieneDesglose = Boolean(desgloseReserva.vuelo || desgloseReserva.hotel || desgloseReserva.excursiones);
               return (
-                <details key={reserva.id} open className="vidrio filo-aurora group overflow-hidden rounded-3xl">
-                  <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-4 border-b border-white/60 px-5 py-4 marker:hidden sm:px-6">
+                <details key={reserva.id} open className="vidrio group overflow-hidden rounded-3xl">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-4 border-b border-primario/12 px-5 py-4 marker:hidden sm:px-6">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-widest text-primario-suave">Reserva #{reserva.id}</p>
                       <h3 className="mt-1 font-display text-2xl font-bold text-primario">{reserva.paquete?.nombre || reserva.destino}</h3>
                       <p className="mt-1 text-sm text-texto-suave">{formatearUbicacion(reserva.destino, reserva.pais)} · {formatearFecha(reserva.fechaSalida)}</p>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="rounded-full bg-gradient-to-br from-primario-suave to-primario px-3 py-1 font-semibold capitalize text-white shadow-md shadow-primario/25">{etiquetaEstado(reserva.estado)}</span>
-                      <span className="rounded-full border border-white/70 bg-white/60 px-3 py-1 capitalize text-texto-suave backdrop-blur-sm">Pago: {etiquetaEstado(reserva.estadoPago)}</span>
+                      <span className="rounded-full bg-primario px-3 py-1 font-semibold capitalize text-white">{etiquetaEstado(reserva.estado)}</span>
+                      <span className="rounded-full border border-primario/12 bg-white/60 px-3 py-1 capitalize text-texto-suave backdrop-blur-sm">Pago: {etiquetaEstado(reserva.estadoPago)}</span>
                     </div>
                   </summary>
 
@@ -637,8 +639,16 @@ function Reservas() {
                         <div><dt className="text-texto-suave">Origen</dt><dd className="font-semibold text-texto">{reserva.origen || vuelo?.origen || "Sin definir"}</dd></div>
                         <div><dt className="text-texto-suave">Total</dt><dd className="font-semibold text-texto">{formatearMoneda(reserva.montoTotal || reserva.paquete?.precioBase)}</dd></div>
                       </dl>
-                      {tieneDesglose && (
-                        <div className="mt-4 border-t border-white/70 pt-3 text-sm">
+                      {tieneDesglose && reserva.paqueteId && (
+                        <div className="mt-4 border-t border-primario/12 pt-3 text-sm">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Cómo se compone</p>
+                          <p className="mt-2 text-texto-suave">
+                            Paquete cerrado: el precio ya incluye vuelo, hotel y excursiones.
+                          </p>
+                        </div>
+                      )}
+                      {tieneDesglose && !reserva.paqueteId && (
+                        <div className="mt-4 border-t border-primario/12 pt-3 text-sm">
                           <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Cómo se compone</p>
                           <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
                             <p><span className="block text-texto-suave">Vuelo</span><strong className="text-texto">{formatearMoneda(desgloseReserva.vuelo)}</strong></p>
@@ -680,7 +690,7 @@ function Reservas() {
                     <div className="vidrio-sutil rounded-2xl p-4">
                       <h4 className="font-semibold text-primario">Excursiones incluidas</h4>
                       {excursiones?.length ? (
-                        <ul className="mt-3 divide-y divide-white/70 text-sm">
+                        <ul className="mt-3 divide-y divide-primario/10 text-sm">
                           {excursiones.map((excursion) => (
                             <li key={excursion.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
                               <span><strong className="text-texto">{excursion.nombre}</strong><span className="block text-texto-suave">{[[excursion.ciudad, excursion.pais].filter(Boolean).join(", "), `${excursion.duracionHoras} horas`].filter(Boolean).join(" · ")}</span></span>
@@ -691,7 +701,7 @@ function Reservas() {
                       ) : <p className="mt-3 text-sm text-texto-suave">No incluye excursiones.</p>}
                     </div>
 
-                    <div className="border-t border-white/70 pt-4 text-sm lg:col-span-2">
+                    <div className="border-t border-primario/12 pt-4 text-sm lg:col-span-2">
                       <div className="grid gap-3 sm:grid-cols-3">
                         <p><span className="block text-texto-suave">Teléfono de contacto</span><strong className="text-texto">{reserva.telefonoContacto || "No registrado"}</strong></p>
                         <p><span className="block text-texto-suave">Método de pago</span><strong className="capitalize text-texto">{reserva.metodoPago || "Pendiente"}</strong></p>

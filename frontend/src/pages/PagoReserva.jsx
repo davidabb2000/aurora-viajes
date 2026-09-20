@@ -1,36 +1,43 @@
 import { useEffect, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { solicitar } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 
 function PagoReserva() {
   const { sesion } = useAuth();
+  const token = sesion?.token;
   const { id } = useParams();
   const [reserva, setReserva] = useState(null);
   const [checkoutUrl, setCheckoutUrl] = useState("");
-  const [mensaje, setMensaje] = useState("");
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    if (!sesion) return;
-    const headers = { Authorization: `Bearer ${sesion.token}` };
+    if (!token) return undefined;
+    let activo = true;
     const cargar = async () => {
       try {
-        const datos = await solicitar(`/reservas/${id}`, { headers });
+        const datos = await solicitar(`/reservas/${id}`);
+        if (!activo) return;
         setReserva(datos);
-        const checkout = await solicitar(`/reservas/${id}/pago/checkout`, { method: "POST", headers });
-        setCheckoutUrl(checkout.checkoutUrl || "");
+        // Una reserva pagada o cancelada no se cobra: antes esta página abría un
+        // cobro nuevo en cada visita, incluso con la reserva ya pagada.
+        if (datos.estadoPago === "pagado" || datos.estado === "cancelada") return;
+        const checkout = await solicitar(`/reservas/${id}/pago/checkout`, { method: "POST" });
+        if (activo) setCheckoutUrl(checkout.checkoutUrl || "");
       } catch (requestError) {
-        setError(requestError.message);
+        if (activo) setError(requestError.message);
       } finally {
-        setCargando(false);
+        if (activo) setCargando(false);
       }
     };
     cargar();
-  }, [id, sesion]);
+    return () => {
+      activo = false;
+    };
+  }, [id, token]);
 
-  if (!sesion) return <Navigate to="/login" replace />;
+  if (!sesion) return <Navigate to="/login" state={{ desde: `/reservas/pago/${id}` }} replace />;
 
   if (cargando) {
     return (
@@ -48,12 +55,25 @@ function PagoReserva() {
     );
   }
 
+  const yaPagada = reserva.estadoPago === "pagado";
+  const cancelada = reserva.estado === "cancelada";
+
   return (
     <main className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
-      <section className="vidrio filo-aurora rounded-3xl p-6 sm:p-9">
-        <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm"><span className="h-1.5 w-1.5 rounded-full bg-acento" aria-hidden="true" />Checkout seguro</span>
-        <h1 className="mt-3 font-display text-4xl font-bold"><span className="titulo-aurora">Completa el pago de tu reserva</span></h1>
-        <p className="mt-3 text-texto-suave">Tu reserva quedará confirmada cuando Stripe marque el pago como realizado.</p>
+      <section className="vidrio rounded-3xl p-6 sm:p-9">
+        <span className="antetitulo">{yaPagada ? "Pago registrado" : cancelada ? "Reserva cancelada" : "Checkout seguro"}</span>
+        <h1 className="mt-3 text-4xl sm:text-5xl">
+          <span className="titulo-aurora">
+            {yaPagada ? "Esta reserva ya está pagada" : cancelada ? "Esta reserva fue cancelada" : "Completa el pago de tu reserva"}
+          </span>
+        </h1>
+        <p className="mt-3 text-texto-suave">
+          {yaPagada
+            ? "No tienes nada más que pagar. Puedes ver el detalle y descargar tu factura desde tu panel."
+            : cancelada
+              ? "Una reserva cancelada no se puede pagar. Si fue un error, escríbenos y la revisamos."
+              : "Tu reserva quedará confirmada cuando Stripe marque el pago como realizado."}
+        </p>
         <div className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
           <div className="vidrio-sutil rounded-2xl p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-texto-suave">Destino</p>
@@ -73,18 +93,23 @@ function PagoReserva() {
           </div>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => window.location.assign(checkoutUrl)}
-            disabled={!checkoutUrl}
-            className="rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-5 py-3 font-semibold text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40 disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
-          >
-            Ir a Stripe Checkout
-          </button>
+          {yaPagada || cancelada ? (
+            <Link to="/panel" className="boton-tinta px-6 py-3 font-semibold no-underline">
+              Ir a mi panel
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => window.location.assign(checkoutUrl)}
+              disabled={!checkoutUrl}
+              className="boton-tinta px-6 py-3 font-semibold"
+            >
+              Ir a Stripe Checkout
+            </button>
+          )}
         </div>
-        {mensaje && <p className="mt-4 text-sm font-medium text-primario">{mensaje}</p>}
         {error && <p className="mt-4 rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm font-medium text-red-700 backdrop-blur-sm">{error}</p>}
-        <p className="mt-5 text-sm text-texto-suave">Al volver desde Stripe, la reserva se confirma automáticamente.</p>
+        {!yaPagada && !cancelada && <p className="mt-5 text-sm text-texto-suave">Al volver desde Stripe, la reserva se confirma automáticamente.</p>}
       </section>
     </main>
   );

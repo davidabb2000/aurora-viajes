@@ -7,13 +7,13 @@ const API_URL = import.meta.env.VITE_API_URL || "/api";
 const dinero = (valor) => `$${Number(valor || 0).toLocaleString("es-CO")}`;
 const estadoTexto = (estado) => estado?.replace("_", " ") || "pendiente";
 const PESTANAS = ["resumen", "reservas vendidas", "facturas", "pqr", "chatbot"];
-const CAMPO = "mt-1 w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm text-texto shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20";
+const CAMPO = "mt-1 w-full rounded-xl border border-primario/12 bg-white/70 px-3 py-2 text-sm text-texto shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20";
 const BOTON_VIDRIO = "vidrio rounded-xl px-4 py-2 text-sm font-semibold text-primario transition hover:-translate-y-0.5 hover:bg-white/85";
 
 function Card({ titulo, valor, detalle, variacion }) {
   const sube = typeof variacion === "number" && variacion >= 0;
   return (
-    <article className="vidrio vidrio-interactivo filo-aurora rounded-2xl p-5">
+    <article className="vidrio vidrio-interactivo rounded-2xl p-5">
       <p className="text-xs font-semibold uppercase tracking-widest text-texto-suave">{titulo}</p>
       <p className="mt-3 font-display text-3xl font-bold text-primario">{valor}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -21,7 +21,7 @@ function Card({ titulo, valor, detalle, variacion }) {
         {typeof variacion === "number" && (
           <span
             className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-              sube ? "bg-acento/15 text-acento" : "bg-brillo/15 text-brillo"
+              sube ? "bg-primario/10 text-primario" : "bg-acento/15 text-brillo"
             }`}
           >
             {sube ? "▲" : "▼"} {Math.abs(variacion)}% vs. periodo anterior
@@ -88,11 +88,11 @@ function Graficos({ datos }) {
       <article className="vidrio rounded-3xl p-6">
         <h2 className="font-display text-xl font-bold text-primario">Reservas vendidas por periodo</h2>
         <p className="mt-1 text-xs text-texto-suave">Máximo del periodo: {dinero(maximo)}</p>
-        <div className="mt-6 flex h-44 items-end gap-2 rounded-xl border-b border-l border-white/70 bg-white/30 px-2 pt-2">
+        <div className="mt-6 flex h-44 items-end gap-2 rounded-xl border-b border-l border-primario/12 bg-white/30 px-2 pt-2">
           {datos.map((item) => (
             <div key={item.fecha} className="group flex h-full flex-1 items-end" title={`${item.fecha}: ${dinero(item.total)}`}>
               <div
-                className="w-full rounded-t-md bg-gradient-to-t from-primario to-acento-suave transition group-hover:from-brillo group-hover:to-brillo-suave"
+                className="w-full rounded-t-md bg-primario transition group-hover:bg-acento"
                 style={{ height: `${Math.max((item.total / maximo) * 100, 3)}%` }}
               />
             </div>
@@ -111,12 +111,12 @@ function Graficos({ datos }) {
         <svg viewBox="0 0 600 180" className="mt-6 h-44 w-full" role="img" aria-label="Tendencia de facturación">
           <defs>
             <linearGradient id="relleno-tendencia" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-primario-suave)" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="var(--color-primario-suave)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--color-primario)" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="var(--color-primario)" stopOpacity="0" />
             </linearGradient>
             <linearGradient id="linea-tendencia" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="var(--color-acento)" />
-              <stop offset="100%" stopColor="var(--color-brillo)" />
+              <stop offset="0%" stopColor="var(--color-primario)" />
+              <stop offset="100%" stopColor="var(--color-acento)" />
             </linearGradient>
           </defs>
           {area && <polygon fill="url(#relleno-tendencia)" points={area} />}
@@ -142,10 +142,11 @@ function Graficos({ datos }) {
 
 function ComposicionIngresos({ porConcepto }) {
   const conceptos = [
-    ["Vuelos", porConcepto.vuelo, "from-primario to-primario-suave"],
-    ["Hoteles", porConcepto.hotel, "from-acento to-acento-suave"],
-    ["Excursiones", porConcepto.excursiones, "from-brillo to-brillo-suave"],
-    ["Otros", porConcepto.otros, "from-texto-suave to-borde"],
+    ["Paquetes", porConcepto.paquete, "bg-oro"],
+    ["Vuelos", porConcepto.vuelo, "bg-primario"],
+    ["Hoteles", porConcepto.hotel, "bg-acento"],
+    ["Excursiones", porConcepto.excursiones, "bg-primario-suave"],
+    ["Otros", porConcepto.otros, "bg-borde"],
   ];
   const total = conceptos.reduce((suma, [, valor]) => suma + Number(valor || 0), 0) || 1;
   return (
@@ -156,7 +157,7 @@ function ComposicionIngresos({ porConcepto }) {
         {conceptos.map(([nombre, valor, degradado]) => (
           <div
             key={nombre}
-            className={`bg-gradient-to-r ${degradado}`}
+            className={degradado}
             style={{ width: `${(Number(valor || 0) / total) * 100}%` }}
             title={`${nombre}: ${dinero(valor)}`}
           />
@@ -166,7 +167,7 @@ function ComposicionIngresos({ porConcepto }) {
         {conceptos.map(([nombre, valor, degradado]) => (
           <div key={nombre} className="flex items-center justify-between gap-4">
             <dt className="flex items-center gap-2 text-texto-suave">
-              <span className={`h-2.5 w-2.5 rounded-full bg-gradient-to-r ${degradado}`} aria-hidden="true" />
+              <span className={`h-2.5 w-2.5 rounded-full ${degradado}`} aria-hidden="true" />
               {nombre}
             </dt>
             <dd className="font-semibold text-texto">
@@ -193,7 +194,7 @@ function TablaRanking({ titulo, subtitulo, filas, columnas, vacio }) {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/70">
+          <tbody className="divide-y divide-primario/10">
             {filas.map((fila, indice) => (
               <tr key={fila[columnas[0].clave] ?? indice}>
                 {columnas.map((columna) => (
@@ -263,16 +264,13 @@ export default function AvanceCinco() {
 
   const indicadores = datos?.indicadores;
   return <main className="mx-auto w-[92%] max-w-275 flex-1 py-8 sm:py-12">
-    <section className="vidrio filo-aurora flex flex-wrap items-end justify-between gap-5 rounded-3xl p-6 sm:p-8">
+    <section className="vidrio flex flex-wrap items-end justify-between gap-5 rounded-3xl p-6 sm:p-8">
       <div>
-        <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">
-          <span className="h-1.5 w-1.5 rounded-full bg-acento" aria-hidden="true" />
-          Quinto entregable
-        </span>
+        <span className="antetitulo">Quinto entregable</span>
         <h1 className="mt-3 font-display text-4xl font-bold"><span className="titulo-aurora">Reservas y facturación</span></h1>
         <p className="mt-2 max-w-2xl text-sm text-texto-suave">Cada reserva de viaje se convierte en una venta, factura y registro consultable.</p>
       </div>
-      <span className="rounded-full border border-white/70 bg-white/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-texto-suave backdrop-blur-sm">Rol: {rol}</span>
+      <span className="rounded-full border border-primario/12 bg-white/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-texto-suave backdrop-blur-sm">Rol: {rol}</span>
     </section>
 
     {mensaje && <p className="vidrio mt-5 rounded-2xl p-4 text-sm text-texto">{mensaje}</p>}
@@ -288,7 +286,7 @@ export default function AvanceCinco() {
           onClick={() => setPestana(vista)}
           className={`rounded-xl px-4 py-2 text-sm font-semibold capitalize transition ${
             pestana === vista
-              ? "bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro text-white shadow-lg shadow-primario/30"
+              ? "boton-tinta text-white"
               : "text-texto-suave hover:bg-white/60 hover:text-primario"
           }`}
         >
@@ -321,7 +319,7 @@ export default function AvanceCinco() {
         <Graficos datos={datos.ventasPorDia} />
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <ComposicionIngresos porConcepto={datos.porConcepto || { vuelo: 0, hotel: 0, excursiones: 0, otros: 0 }} />
+          <ComposicionIngresos porConcepto={datos.porConcepto || { paquete: 0, vuelo: 0, hotel: 0, excursiones: 0, otros: 0 }} />
           <TablaRanking
             titulo="Estado de las ventas"
             subtitulo="Cuántas ventas hay en cada estado y cuánto suman."
@@ -371,12 +369,12 @@ export default function AvanceCinco() {
         </div>
         <DescargarReportes headers={headers} filtros={filtros} />
       </div>
-      <div className="mt-5 divide-y divide-white/70">
+      <div className="mt-5 divide-y divide-primario/10">
         {ventas.map((item) => <article key={item.id} className="grid gap-3 py-5 sm:grid-cols-[1fr_auto] sm:items-center">
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <strong>Reserva / venta #{item.id}</strong>
-              <span className="rounded-full border border-white/70 bg-white/60 px-2.5 py-0.5 text-xs font-semibold capitalize text-primario backdrop-blur-sm">{estadoTexto(item.estado)}</span>
+              <span className="rounded-full border border-primario/12 bg-white/60 px-2.5 py-0.5 text-xs font-semibold capitalize text-primario backdrop-blur-sm">{estadoTexto(item.estado)}</span>
             </div>
             <p className="mt-1 text-sm text-texto">{item.detalles.map((detalle) => detalle.nombre).join(", ")}</p>
             <p className="text-sm text-texto-suave">Cliente: {item.cliente?.nombre} · {item.fecha?.slice(0, 10)} · {item.detalles.reduce((total, detalle) => total + detalle.cantidad, 0)} pasajero(s)</p>
@@ -390,7 +388,7 @@ export default function AvanceCinco() {
     {pestana === "facturas" && <section className="vidrio mt-8 rounded-3xl p-6">
       <h2 className="font-display text-2xl font-bold text-primario">Facturas de reservas</h2>
       <p className="mt-1 text-sm text-texto-suave">Cada factura detalla el vuelo, el hotel y las excursiones por separado.</p>
-      <div className="mt-5 divide-y divide-white/70">
+      <div className="mt-5 divide-y divide-primario/10">
         {facturas.map((item) => <article key={item.id} className="flex flex-wrap items-center justify-between gap-4 py-4">
           <div>
             <strong>{item.numero}</strong>
@@ -409,16 +407,16 @@ export default function AvanceCinco() {
           <select value={formPqr.tipo} onChange={(evento) => setFormPqr({ ...formPqr, tipo: evento.target.value })} className={CAMPO}><option value="peticion">Petición</option><option value="queja">Queja</option><option value="reclamo">Reclamo</option></select>
           <input required value={formPqr.asunto} onChange={(evento) => setFormPqr({ ...formPqr, asunto: evento.target.value })} placeholder="Asunto" className={CAMPO} />
           <textarea required value={formPqr.descripcion} onChange={(evento) => setFormPqr({ ...formPqr, descripcion: evento.target.value })} placeholder="Describe tu solicitud" className={`${CAMPO} min-h-28`} />
-          <button className="rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-4 py-2.5 font-semibold text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40">Enviar solicitud</button>
+          <button className="rounded-xl boton-tinta px-4 py-2.5 font-semibold text-white">Enviar solicitud</button>
         </div>
       </form>
       <div className="vidrio rounded-3xl p-6">
         <h2 className="font-display text-2xl font-bold text-primario">Seguimiento de solicitudes</h2>
-        <div className="mt-4 divide-y divide-white/70">
+        <div className="mt-4 divide-y divide-primario/10">
           {pqr.map((item) => <article key={item.id} className="py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <strong>{item.asunto}</strong>
-              <span className="rounded-full border border-white/70 bg-white/60 px-2.5 py-0.5 text-xs font-semibold capitalize text-primario backdrop-blur-sm">{estadoTexto(item.estado)}</span>
+              <span className="rounded-full border border-primario/12 bg-white/60 px-2.5 py-0.5 text-xs font-semibold capitalize text-primario backdrop-blur-sm">{estadoTexto(item.estado)}</span>
             </div>
             <p className="mt-1 text-sm text-texto-suave">{item.descripcion}</p>
             {esPersonal && <select value={item.estado} onChange={(evento) => actualizarPqr(item, evento.target.value)} className={`${CAMPO} w-auto`}><option value="pendiente">Pendiente</option><option value="en_proceso">En proceso</option><option value="respondida">Respondida</option><option value="cerrada">Cerrada</option></select>}
@@ -428,13 +426,13 @@ export default function AvanceCinco() {
       </div>
     </section>}
 
-    {pestana === "chatbot" && <section className="vidrio filo-aurora mx-auto mt-8 max-w-3xl rounded-3xl p-6 sm:p-8">
-      <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">Atención inteligente</span>
+    {pestana === "chatbot" && <section className="vidrio mx-auto mt-8 max-w-3xl rounded-3xl p-6 sm:p-8">
+      <span className="antetitulo">Atención inteligente</span>
       <h2 className="mt-3 font-display text-3xl font-bold"><span className="titulo-aurora">Chatbot Aurora</span></h2>
       <p className="mt-2 text-sm text-texto-suave">Resuelve dudas sobre destinos, reservas y PQR.</p>
       <form onSubmit={preguntar} className="mt-6 flex flex-wrap gap-2">
         <input required value={pregunta} onChange={(evento) => setPregunta(evento.target.value)} placeholder="Escribe tu pregunta" className={`${CAMPO} min-w-0 flex-1`} />
-        <button className="rounded-xl bg-gradient-to-br from-primario-suave via-primario to-primario-oscuro px-5 py-2.5 font-semibold text-white shadow-lg shadow-primario/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primario/40">Enviar</button>
+        <button className="rounded-xl boton-tinta px-5 py-2.5 font-semibold text-white">Enviar</button>
       </form>
       {respuesta && <p className="vidrio-sutil mt-5 rounded-2xl border-l-4 border-l-acento p-4 text-sm leading-6 text-texto">{respuesta}</p>}
     </section>}

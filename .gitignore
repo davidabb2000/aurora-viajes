@@ -4,7 +4,7 @@ venv/
 .venv/
 .venv312/
 __pycache__/
-*.pyc
+*.py[cod]
 
 # Variables de entorno (nunca subir secretos)
 .env

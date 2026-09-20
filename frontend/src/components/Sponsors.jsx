@@ -1,3 +1,5 @@
+import Revelar from "./Revelar";
+
 const patrocinadores = [
   { nombre: "Airbnb", archivo: "airbnb.webp" },
   { nombre: "Avianca", archivo: "avianca.png" },
@@ -14,7 +16,7 @@ function LogoPatrocinador({ patrocinador }) {
       <img
         src={`/logos/patrocinadores/${patrocinador.archivo}`}
         alt={`Logo de ${patrocinador.nombre}`}
-        className="max-h-12 max-w-37.5 object-contain grayscale transition duration-300 group-hover:grayscale-0"
+        className="max-h-12 max-w-37.5 object-contain opacity-70 grayscale transition duration-300 group-hover:opacity-100 group-hover:grayscale-0"
         onError={(event) => {
           event.currentTarget.hidden = true;
           event.currentTarget.nextElementSibling.hidden = false;
@@ -29,22 +31,19 @@ function LogoPatrocinador({ patrocinador }) {
 
 function Sponsors() {
   return (
-    <section className="mt-16 sm:mt-20" aria-labelledby="patrocinadores-titulo">
-      <div className="vidrio filo-aurora mx-auto w-[92%] max-w-275 overflow-hidden rounded-3xl">
-        <div className="flex items-center justify-center gap-4 px-5 pb-5 pt-7 sm:gap-6 sm:pt-8">
-          <span className="h-px w-10 bg-gradient-to-r from-transparent to-acento sm:w-16" aria-hidden="true" />
-          <h2 id="patrocinadores-titulo" className="text-center text-xs font-semibold uppercase tracking-[0.28em] text-primario">
-            Patrocinadores
-          </h2>
-          <span className="h-px w-10 bg-gradient-to-l from-transparent to-brillo sm:w-16" aria-hidden="true" />
-        </div>
+    <section className="bg-fondo py-20 sm:py-28" aria-labelledby="patrocinadores-titulo">
+      <Revelar className="mx-auto w-[92%] max-w-300">
+        <p className="antetitulo">Nuestros aliados</p>
+        <h2 id="patrocinadores-titulo" className="mt-4 max-w-[16ch] font-display text-[clamp(2.3rem,5vw,3.9rem)] leading-[1.04] tracking-[-0.03em]">
+          Volamos y dormimos con los mejores
+        </h2>
+      </Revelar>
 
-        <div className="relative flex overflow-hidden border-t border-white/60 bg-white/30 py-2">
-          <div className="flex w-max shrink-0 animate-desplazar-logos will-change-transform hover:[animation-play-state:paused]">
-            {[...patrocinadores, ...patrocinadores].map((patrocinador, indice) => (
-              <LogoPatrocinador key={`${patrocinador.archivo}-${indice}`} patrocinador={patrocinador} />
-            ))}
-          </div>
+      <div className="relative mt-12 flex overflow-hidden border-y border-primario/12 py-3 [mask-image:linear-gradient(90deg,transparent,#000_8%,#000_92%,transparent)]">
+        <div className="flex w-max shrink-0 animate-desplazar-logos will-change-transform hover:[animation-play-state:paused]">
+          {[...patrocinadores, ...patrocinadores].map((patrocinador, indice) => (
+            <LogoPatrocinador key={`${patrocinador.archivo}-${indice}`} patrocinador={patrocinador} />
+          ))}
         </div>
       </div>
     </section>

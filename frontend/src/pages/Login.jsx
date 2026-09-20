@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import RecoverPassword from "../components/RecoverPassword";
@@ -11,7 +11,9 @@ import { useAuth } from "../context/AuthContext";
 const VALORES_INICIALES = { correo: "", contrasena: "" };
 
 function Login() {
-  const { iniciarSesion } = useAuth();
+  const { iniciarSesion, cerrarSesion } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [vista, setVista] = useState("login"); // "login" | "recuperar"
   const [registroAbierto, setRegistroAbierto] = useState(false);
 
@@ -61,6 +63,11 @@ function Login() {
         body: JSON.stringify(valores),
       });
       iniciarSesion(datos, recordarme);
+      // Quien llegó desde una página protegida (p. ej. una tarjeta de destino) vuelve a ella.
+      if (location.state?.desde) {
+        navigate(location.state.desde, { replace: true });
+        return;
+      }
       setSesionIniciada(true);
     } catch (error) {
       setMensajeError(error.message);
@@ -71,15 +78,13 @@ function Login() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-14">
-      <div className="vidrio filo-aurora w-full max-w-md rounded-3xl p-7 sm:p-9">
-        <NavLink to="/" className="mb-6 flex items-center justify-center gap-2 font-display text-2xl font-bold no-underline">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-acento-suave via-primario-suave to-brillo text-lg text-white shadow-md shadow-primario/25">✦</span>
+      <div className="vidrio w-full max-w-md rounded-3xl p-7 sm:p-9">
+        <NavLink to="/" className="mb-6 flex items-center justify-center gap-2.5 font-display text-2xl no-underline">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-oro text-lg text-primario">✦</span>
           <span className="titulo-aurora">Aurora Viajes</span>
         </NavLink>
-        <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primario-suave backdrop-blur-sm">
-          Bienvenido de vuelta
-        </span>
-        <h1 className="mb-6 mt-3 font-display text-2xl font-bold sm:text-3xl">
+        <span className="antetitulo">Bienvenido de vuelta</span>
+        <h1 className="mb-6 mt-3 font-display text-3xl sm:text-4xl">
           <span className="titulo-aurora">{vista === "login" ? "Inicia sesión" : "Recuperar contraseña"}</span>
         </h1>
 
@@ -95,6 +100,7 @@ function Login() {
             <Button
               variant="secundario"
               onClick={() => {
+                cerrarSesion();
                 setSesionIniciada(false);
                 setValores(VALORES_INICIALES);
                 setTocados({});
@@ -140,7 +146,7 @@ function Login() {
                   type="checkbox"
                   checked={recordarme}
                   onChange={(evento) => setRecordarme(evento.target.checked)}
-                  className="h-4 w-4 rounded border-white/70 accent-primario"
+                  className="h-4 w-4 rounded border-primario/12 accent-primario"
                 />
                 Recordarme
               </label>
