@@ -68,6 +68,10 @@ class Configuracion(BaseSettings):
     # siguiente arranque vuelve a fijar su clave a ADMIN_PASSWORD (para recuperar el acceso).
     admin_restablecer_contrasena: bool = False
 
+    # Con false, una base que ya tiene datos y necesita migrarse NO se migra sola: la API arranca en espera (503) y avisa.
+    # Sirve para hacer una copia de seguridad antes de la primera migración de una base real; después se vuelve a true.
+    migracion_automatica: bool = True
+
     # Cuántos proxies de confianza hay delante de la app (Railway = 1). La IP del cliente es la
     # de la derecha de X-Forwarded-For: lo que el cliente escriba a la izquierda no cuenta.
     proxies_de_confianza: int = 1

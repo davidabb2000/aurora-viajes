@@ -33,6 +33,8 @@ mysqldump --ssl-mode=REQUIRED -h HOST -P PUERTO -u USUARIO -p BASE > respaldo.sq
 
 Cuando compruebes que todo funciona, las tablas `respaldo_v2_*` se pueden borrar para liberar espacio.
 
+**Cómo hacer la copia antes de la primera migración.** Como el backend se recupera solo en cuanto la base responde, la migración empezaría sin darte tiempo a nada. Para pararla: define `MIGRACION_AUTOMATICA=false` en Railway y redespliega; después enciende (o conecta) la base, haz el `mysqldump` y, cuando tengas la copia, pon `MIGRACION_AUTOMATICA=true` (o borra la variable) y redespliega. Mientras esté en `false`, una base **con datos** que necesite migrarse no se toca: `/api/health` responde `"baseDeDatos": "migracion pendiente"` y el resto de la API contesta 503 (una base vacía o ya migrada arranca con normalidad).
+
 ---
 
 ## 2. Backend (Railway)
@@ -68,7 +70,7 @@ Opcionales, según se usen: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PROVE
 
 **Correo.** Railway bloquea el SMTP saliente en los planes que no son Pro, así que con `SMTP_*` los correos de recuperación pueden no salir. La alternativa es la API HTTPS de SendGrid: crea una clave de API con permiso «Mail Send», verifica el remitente (Single Sender) y define `SENDGRID_API_KEY` y `SMTP_FROM` (el remitente verificado). Para probarlo antes de desplegar: `python -m scripts.probar_correo tu@correo.com` desde `backend/`.
 
-Verificación: `https://TU-BACKEND.up.railway.app/api/health` debe devolver `{"estado":"ok","baseDeDatos":"lista"}`. Con `"sin conexion"` la API vive pero no llega a la base (mira la sección «Problemas frecuentes»). Con `DEPURACION=false` el `/docs` queda deshabilitado a propósito.
+Verificación: `https://TU-BACKEND.up.railway.app/api/health` debe devolver `{"estado":"ok","baseDeDatos":"lista"}`. Con `"sin conexion"` la API vive pero no llega a la base, y con `"migracion pendiente"` espera a que actives la migración (mira «Problemas frecuentes» y la sección 1). Con `DEPURACION=false` el `/docs` queda deshabilitado a propósito.
 
 La imagen instala solo `requirements.txt`. Lo que solo necesitan las pruebas (`pytest`, cobertura) está en `requirements-dev.txt` y no se despliega.
 
@@ -135,7 +137,7 @@ La base en Aiven y el frontend en Cloudflare no consumen créditos de Railway.
 
 ## Problemas frecuentes
 
-**`/api/health` dice `"baseDeDatos": "sin conexion"` y todo devuelve 503.** El backend está vivo pero no llega a la base. Con un servicio gestionado, casi siempre está **apagado** (el plan gratuito de Aiven se apaga tras un tiempo sin uso; a veces el nombre del servidor deja de resolver): enciéndelo desde su consola y espera unos minutos. No hace falta redesplegar: el backend reintenta solo cada pocos segundos y, cuando la base responde, termina de prepararla (y migra, si toca). Si la base se recreó de cero, se crea y se siembra sola, pero se pierden los datos anteriores. Antes de encender una base con datos que importan, haz el `mysqldump` de la sección 1: el backend la migrará en cuanto pueda conectarse. `"error"` significa que la preparación falló por otra causa (mira el log).
+**`/api/health` dice `"baseDeDatos": "sin conexion"` y todo devuelve 503.** El backend está vivo pero no llega a la base. Con un servicio gestionado, casi siempre está **apagado** (el plan gratuito de Aiven se apaga tras un tiempo sin uso; a veces el nombre del servidor deja de resolver): enciéndelo desde su consola y espera unos minutos. No hace falta redesplegar: el backend reintenta solo cada pocos segundos y, cuando la base responde, termina de prepararla (y migra, si toca). Si la base se recreó de cero, se crea y se siembra sola, pero se pierden los datos anteriores. Antes de encender una base con datos que importan, haz el `mysqldump` de la sección 1: el backend la migrará en cuanto pueda conectarse. `"migracion pendiente"` es la pausa que pediste con `MIGRACION_AUTOMATICA=false` (ver la sección 1). `"error"` significa que la preparación falló por otra causa (mira el log).
 
 **El backend reinicia en bucle.** Casi siempre es `SECRET_KEY` sin definir: la aplicación no arranca sin ella.
 

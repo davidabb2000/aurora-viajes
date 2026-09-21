@@ -30,6 +30,7 @@ from app.errores import (
 )
 from app.middlewares import cabeceras_de_seguridad, exigir_base_lista, limitar_tamano_del_cuerpo, registrar_peticion
 from app.routers import auth, catalogo, clientes, comercial, contacto, pagos, pasajeros, recomendaciones, reservas, usuarios, viajes
+from app.services.migraciones import MigracionPendiente
 from app.services.siembra import asegurar_base_inicial
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
@@ -44,6 +45,10 @@ async def _reintentar_preparacion_de_la_base() -> None:
         estado_de_arranque.intentos += 1
         try:
             await asegurar_base_inicial()
+        except MigracionPendiente as pendiente:
+            logger.critical("%s La API responde 503 hasta entonces.", pendiente)
+            estado_de_arranque.migracion_pendiente = True
+            return
         except Exception as error:  # noqa: BLE001 - se clasifica justo debajo
             if es_error_de_conexion(error):
                 estado_de_arranque.ultimo_error = type(error).__name__
@@ -66,6 +71,12 @@ async def ciclo_de_vida(app: FastAPI):
     reintentos = None
     try:
         await asegurar_base_inicial()
+    except MigracionPendiente as pendiente:
+        # No es un fallo: es una pausa pedida a propósito. Reintentar no serviría (la variable no cambia sola): la API se
+        # queda respondiendo 503 y avisando hasta que se active la migración y se reinicie.
+        estado_de_arranque.esperando_base = True
+        estado_de_arranque.migracion_pendiente = True
+        logger.critical("%s La API responde 503 hasta entonces.", pendiente)
     except Exception as error:
         if not es_error_de_conexion(error):
             # Un fallo de la migración o de los datos no se arregla esperando: se cae, y la plataforma conserva la versión anterior.

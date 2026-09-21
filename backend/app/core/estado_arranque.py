@@ -21,6 +21,7 @@ CODIGOS_DE_CONEXION = {1040, 2002, 2003, 2005, 2006, 2013}
 class EstadoDeArranque:
     esperando_base: bool = False
     fallo_definitivo: bool = False
+    migracion_pendiente: bool = False
     ultimo_error: str = ""
     intentos: int = 0
 
@@ -28,6 +29,8 @@ class EstadoDeArranque:
     def descripcion(self) -> str:
         if self.fallo_definitivo:
             return "error"
+        if self.migracion_pendiente:
+            return "migracion pendiente"
         return "sin conexion" if self.esperando_base else "lista"
 
 

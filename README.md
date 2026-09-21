@@ -127,7 +127,7 @@ Todas las rutas cuelgan de `/api`. Las marcadas con 🔒 exigen sesión (`Author
 - **Pagos 🔒:** `POST /reservas/{id}/pago/checkout`, `POST /reservas/{id}/pago/confirmar`, `POST /reservas/{id}/pago/manual` (personal); webhook de Stripe: `POST /pagos/stripe/webhook`
 - **Comercial 🔒:** `GET /ventas`, `GET /facturas`, `GET /facturas/{id}/pdf`, `GET /reportes/ventas?formato=json|pdf|xlsx`, `GET /estadisticas`, `POST|GET|PATCH /pqr`, `POST /chatbot`, `POST /destinos/recomendaciones`
 - **Contacto:** `POST /contacto` (público), `GET /contacto` (administrador)
-- **Salud:** `GET /api/health` → `{"estado": "ok", "baseDeDatos": "lista" | "sin conexion" | "error"}`
+- **Salud:** `GET /api/health` → `{"estado": "ok", "baseDeDatos": "lista" | "sin conexion" | "migracion pendiente" | "error"}`
 
 Los errores tienen un formato único: `{codigo, mensaje, ruta, detalles}`, con los problemas por campo en `detalles`.
 
@@ -154,6 +154,7 @@ Todas van en `backend/.env` en local y en las variables del servicio en Railway.
 |---|---|
 | `SECRET_KEY` | Firma de los JWT. **Obligatoria**: sin ella la app no arranca. |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Administrador inicial, que se crea una sola vez. Con la clave de ejemplo (`Admin123!`) obliga a cambiarla al entrar. |
+| `MIGRACION_AUTOMATICA` | Con `false`, una base que ya tiene datos y necesita migrarse no se migra sola (la API espera con 503 y `/api/health` dice `migracion pendiente`): sirve para hacer una copia de seguridad antes de la primera migración. Por defecto `true`. |
 | `ADMIN_RESTABLECER_CONTRASENA` | En `true`, el siguiente arranque vuelve a fijar la clave del administrador a `ADMIN_PASSWORD` (para recuperar el acceso). |
 | `DATABASE_URL` o `MYSQL_*` | Conexión a la base (una URL de Aiven activa TLS sola). `MOTOR_BD=sqlite` para desarrollo sin MySQL. |
 | `ORIGENES_PERMITIDOS`, `FRONTEND_URL` | CORS y enlaces de retorno de Stripe y de los correos. |

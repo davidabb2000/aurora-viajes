@@ -21,9 +21,14 @@ import re
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.configuracion import configuracion
 from app.services.catalogos import normalizar_texto
 
 logger = logging.getLogger("aurora-viajes.migraciones")
+
+class MigracionPendiente(Exception):
+    """La base tiene datos y necesita migrarse, pero MIGRACION_AUTOMATICA está apagada."""
+
 
 _IDENTIFICADOR = re.compile(r"^[a-z][a-z0-9_]*$")
 _TIPO_SQL = re.compile(r"^[a-z]+(\(\d+(,\d+)?\))?( unsigned)?$")
@@ -146,6 +151,12 @@ async def _contar_nulos(sesion: AsyncSession, tabla: str, columna: str) -> int:
 def _marcar_incompleta(sesion: AsyncSession) -> None:
     """Anota que algo quedó sin aplicar: no se pondrá la marca de versión y el próximo arranque lo reintentará."""
     sesion.info["migracion_incompleta"] = True
+
+
+async def _hay_datos(sesion: AsyncSession) -> bool:
+    """¿Hay cuentas o reservas? Una base recién creada no tiene nada que perder y se puede migrar sin copia."""
+    total = await sesion.scalar(text("SELECT (SELECT COUNT(*) FROM usuarios) + (SELECT COUNT(*) FROM reservas)"))
+    return bool(total)
 
 
 async def _version_aplicada(sesion: AsyncSession) -> int:
@@ -605,6 +616,11 @@ async def migrar_esquema(sesion: AsyncSession) -> None:
         return
     if await _version_aplicada(sesion) >= VERSION_DEL_ESQUEMA:
         return
+    if not configuracion.migracion_automatica and await _hay_datos(sesion):
+        raise MigracionPendiente(
+            "La base de datos tiene datos y necesita migrarse, pero MIGRACION_AUTOMATICA está en false. "
+            "Haz una copia de seguridad (mysqldump) y pon MIGRACION_AUTOMATICA=true, o quítala, para migrarla."
+        )
     sesion.info.pop("migracion_incompleta", None)
     await _migrar_a_v1(sesion)
     await _migrar_a_v2(sesion)

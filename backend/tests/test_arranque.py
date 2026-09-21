@@ -1,18 +1,23 @@
 """Arranque sin base de datos: la API se levanta, contesta 503 con un mensaje claro y se recupera sola."""
+import asyncio
 import socket
 import subprocess
 import sys
 import tempfile
 import textwrap
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
 from app.core import estado_arranque
+from app.core.configuracion import configuracion
 from app.core.estado_arranque import es_error_de_conexion, estado_de_arranque
 from app.main import app
+from app.services import migraciones
+from app.services.migraciones import MigracionPendiente, migrar_esquema
 from tests.test_siembra import _entorno_de
 
 
@@ -28,6 +33,7 @@ def _espera_corta_y_estado_limpio(monkeypatch):
     yield
     estado_de_arranque.esperando_base = False
     estado_de_arranque.fallo_definitivo = False
+    estado_de_arranque.migracion_pendiente = False
     estado_de_arranque.ultimo_error = ""
     estado_de_arranque.intentos = 0
 
@@ -158,3 +164,88 @@ def test_la_api_se_recupera_sola_cuando_la_base_vuelve():
     assert resultado["antes"] == ["sin conexion", 503]
     assert resultado["despues"] == ["lista", 200, 10]
     assert resultado["llamadas"] == 4
+
+
+# --------------------------------------------------------------------------------------
+# MIGRACION_AUTOMATICA: pausa para hacer una copia antes de migrar una base real
+# --------------------------------------------------------------------------------------
+
+
+class SesionMySQLFalsa:
+    """Lo mínimo de una sesión que `migrar_esquema` toca hasta llegar a la puerta: MySQL, versión aplicada y si hay datos."""
+
+    def __init__(self, version=0, hay_datos=True):
+        self.bind = SimpleNamespace(dialect=SimpleNamespace(name="mysql"))
+        self.info = {}
+        self._respuestas = [version, 1 if hay_datos else 0]
+
+    async def scalar(self, consulta, parametros=None):
+        return self._respuestas.pop(0)
+
+
+def correr(sesion):
+    return asyncio.run(migrar_esquema(sesion))
+
+
+@pytest.fixture
+def primer_paso_de_la_migracion(monkeypatch):
+    """Sustituye el primer paso real de la migración por una señal, para saber si se llegó a él."""
+    async def senal(sesion):
+        raise RuntimeError("se empezó a migrar")
+
+    monkeypatch.setattr(migraciones, "_migrar_a_v1", senal)
+
+
+def test_con_la_migracion_automatica_apagada_una_base_con_datos_no_se_toca(monkeypatch):
+    monkeypatch.setattr(configuracion, "migracion_automatica", False)
+    with pytest.raises(MigracionPendiente, match="MIGRACION_AUTOMATICA"):
+        correr(SesionMySQLFalsa(version=0, hay_datos=True))
+
+
+def test_una_base_sin_datos_se_migra_aunque_la_migracion_automatica_este_apagada(monkeypatch, primer_paso_de_la_migracion):
+    monkeypatch.setattr(configuracion, "migracion_automatica", False)
+    with pytest.raises(RuntimeError, match="se empezó a migrar"):
+        correr(SesionMySQLFalsa(version=0, hay_datos=False))
+
+
+def test_con_la_migracion_automatica_encendida_se_migra_una_base_con_datos(monkeypatch, primer_paso_de_la_migracion):
+    monkeypatch.setattr(configuracion, "migracion_automatica", True)
+    with pytest.raises(RuntimeError, match="se empezó a migrar"):
+        correr(SesionMySQLFalsa(version=0, hay_datos=True))
+
+
+def test_una_base_ya_migrada_no_se_toca_ni_se_consulta_de_mas(monkeypatch, primer_paso_de_la_migracion):
+    monkeypatch.setattr(configuracion, "migracion_automatica", False)
+    sesion = SesionMySQLFalsa(version=migraciones.VERSION_DEL_ESQUEMA, hay_datos=True)
+    correr(sesion)  # no lanza nada: con la marca puesta no hay nada que migrar
+    assert sesion._respuestas == [1]  # solo se preguntó por la versión
+
+
+def test_la_api_espera_la_migracion_sin_reintentar_y_lo_dice(monkeypatch, caplog):
+    llamadas = []
+
+    async def pendiente():
+        llamadas.append(1)
+        raise MigracionPendiente("La base necesita migrarse, pero MIGRACION_AUTOMATICA está en false.")
+
+    monkeypatch.setattr("app.main.asegurar_base_inicial", pendiente)
+    with TestClient(app) as cliente:
+        assert cliente.get("/api/health").json() == {"estado": "ok", "baseDeDatos": "migracion pendiente"}
+        assert cliente.get("/api/catalogos/destinos").status_code == 503
+        esperar_a(lambda: False, limite=0.3)  # da tiempo a un reintento, que no debe ocurrir
+    assert len(llamadas) == 1
+    assert "MIGRACION_AUTOMATICA" in caplog.text
+
+
+def test_si_la_migracion_pendiente_aparece_al_reintentar_tambien_se_queda_en_espera(monkeypatch):
+    llamadas = []
+
+    async def primero_sin_red_luego_pendiente():
+        llamadas.append(1)
+        raise sin_conexion() if len(llamadas) == 1 else MigracionPendiente("Falta hacer la copia.")
+
+    monkeypatch.setattr("app.main.asegurar_base_inicial", primero_sin_red_luego_pendiente)
+    with TestClient(app) as cliente:
+        assert esperar_a(lambda: cliente.get("/api/health").json()["baseDeDatos"] == "migracion pendiente")
+        assert cliente.get("/api/catalogos/destinos").status_code == 503
+    assert len(llamadas) == 2
