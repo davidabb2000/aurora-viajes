@@ -36,7 +36,7 @@ function PagoExitoso() {
   }, [reservaId, sessionId, token]);
 
   return (
-    <main className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
+    <div className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
       <section className="vidrio rounded-3xl p-8 sm:p-10">
         <span className="grid h-14 w-14 place-items-center rounded-full bg-oro text-2xl text-primario">✓</span>
         <span className="antetitulo mt-6">Pago completado</span>
@@ -56,7 +56,7 @@ function PagoExitoso() {
           </Link>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
 

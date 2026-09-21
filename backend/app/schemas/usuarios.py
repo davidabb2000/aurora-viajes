@@ -1,20 +1,23 @@
-"""Esquemas de entrada de usuarios y validación de credenciales."""
+"""Esquemas de entrada de usuarios."""
 import re
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.politica_contrasena import normalizar_correo, validar_contrasena
 
 TIPOS_DOCUMENTO_VALIDOS = {"CC", "TI", "CE", "PA"}
 ROLES_VALIDOS = {"administrador", "empleado", "cliente"}
-REGEX_CONTRASENA = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$")
-REGEX_DIRECCION = re.compile(r"^[A-Za-zÁÉÍÓÚáéíóúÑñ0-9#\-.,\s]+$")
+REGEX_DIRECCION = re.compile(r"^[A-Za-zÁÉÍÓÚÜáéíóúüÑñ0-9#\-.,°\s]+$")
+REGEX_NOMBRE = re.compile(r"^[A-Za-zÁÉÍÓÚÜáéíóúüÑñ][A-Za-zÁÉÍÓÚÜáéíóúüÑñ '\-]*$")
 
 
-def exigir_contrasena_robusta(valor: str) -> str:
-    """Rechaza contrasenas triviales: pide mayuscula, minuscula y digito."""
-    if not any(c.islower() for c in valor) or not any(c.isupper() for c in valor) or not any(c.isdigit() for c in valor):
-        raise ValueError("La contrasena debe incluir mayuscula, minuscula y al menos un numero.")
-    return valor
+def _validar_nombre_propio(value: str) -> str:
+    limpio = " ".join(value.split())
+    if len(limpio) < 2:
+        raise ValueError("Este campo es obligatorio.")
+    if not REGEX_NOMBRE.match(limpio):
+        raise ValueError("Solo se permiten letras, espacios, apóstrofes y guiones.")
+    return limpio
 
 
 class UserCreate(BaseModel):
@@ -27,18 +30,10 @@ class UserCreate(BaseModel):
     correo: str
     contrasena: str = Field(..., min_length=8, max_length=128)
 
-    @field_validator("contrasena")
-    @classmethod
-    def validar_robustez_contrasena(cls, value: str) -> str:
-        return exigir_contrasena_robusta(value)
-
     @field_validator("nombre", "apellido")
     @classmethod
     def validar_nombre(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Este campo es obligatorio.")
-        return value
+        return _validar_nombre_propio(value)
 
     @field_validator("tipoDocumento")
     @classmethod
@@ -50,14 +45,14 @@ class UserCreate(BaseModel):
     @field_validator("numeroDocumento", "telefono")
     @classmethod
     def validar_numerico(cls, value: str) -> str:
-        if not value.isdigit():
+        if not value.isascii() or not value.isdigit():
             raise ValueError("Solo se permiten números.")
         return value
 
     @field_validator("direccion")
     @classmethod
     def validar_direccion(cls, value: str) -> str:
-        value = value.strip()
+        value = " ".join(value.split())
         if not REGEX_DIRECCION.match(value):
             raise ValueError("La dirección contiene caracteres no permitidos.")
         return value
@@ -65,16 +60,25 @@ class UserCreate(BaseModel):
     @field_validator("correo")
     @classmethod
     def validar_correo(cls, value: str) -> str:
-        value = value.strip().lower()
-        if "@" not in value or "." not in value.split("@")[-1]:
-            raise ValueError("Correo electrónico inválido.")
-        return value
+        return normalizar_correo(value)
 
     @field_validator("contrasena")
     @classmethod
-    def validar_contrasena(cls, value: str) -> str:
-        if not REGEX_CONTRASENA.match(value):
-            raise ValueError("Debe incluir mayúscula, minúscula, número y un carácter especial (8 a 20 caracteres).")
+    def validar_contrasena_completa(cls, value: str, info) -> str:
+        # `info.data` ya trae el correo y el nombre validados: la clave no puede contenerlos.
+        return validar_contrasena(value, info.data.get("correo"), info.data.get("nombre"), info.data.get("apellido"))
+
+
+class RegistroPublico(UserCreate):
+    """El registro desde la web exige aceptar el tratamiento de datos; la fecha se guarda."""
+
+    aceptaTratamientoDatos: bool
+
+    @field_validator("aceptaTratamientoDatos")
+    @classmethod
+    def exigir_aceptacion(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("Debes autorizar el tratamiento de tus datos para crear la cuenta.")
         return value
 
 
@@ -99,6 +103,11 @@ class UserUpdate(BaseModel):
     correo: str | None = None
     rol: str | None = None
 
+    @field_validator("nombre", "apellido")
+    @classmethod
+    def validar_nombre(cls, value: str | None) -> str | None:
+        return _validar_nombre_propio(value) if value is not None else None
+
     @field_validator("tipoDocumento")
     @classmethod
     def validar_tipo_documento(cls, value: str | None) -> str | None:
@@ -109,7 +118,7 @@ class UserUpdate(BaseModel):
     @field_validator("numeroDocumento", "telefono")
     @classmethod
     def validar_numerico(cls, value: str | None) -> str | None:
-        if value is not None and not value.isdigit():
+        if value is not None and (not value.isascii() or not value.isdigit()):
             raise ValueError("Solo se permiten números.")
         return value
 
@@ -117,7 +126,7 @@ class UserUpdate(BaseModel):
     @classmethod
     def validar_direccion(cls, value: str | None) -> str | None:
         if value is not None:
-            value = value.strip()
+            value = " ".join(value.split())
             if not REGEX_DIRECCION.match(value):
                 raise ValueError("La dirección contiene caracteres no permitidos.")
         return value
@@ -125,11 +134,7 @@ class UserUpdate(BaseModel):
     @field_validator("correo")
     @classmethod
     def validar_correo(cls, value: str | None) -> str | None:
-        if value is not None:
-            value = value.strip().lower()
-            if "@" not in value or "." not in value.split("@")[-1]:
-                raise ValueError("Correo electrónico inválido.")
-        return value
+        return normalizar_correo(value) if value is not None else None
 
     @field_validator("rol")
     @classmethod
@@ -141,3 +146,4 @@ class UserUpdate(BaseModel):
 
 class EstadoUpdate(BaseModel):
     activo: bool
+

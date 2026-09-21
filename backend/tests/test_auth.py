@@ -3,10 +3,11 @@
 import logging
 
 from app.core.seguridad import crear_token
+from tests.conftest import CLAVE_ADMIN, CLAVE_CLIENTE, cuerpo_de_vuelo
 
 
 def test_login_correcto_devuelve_token_y_usuario(api):
-    respuesta = api.post("/api/auth/login", json={"correo": "admin@auroraviajes.com", "contrasena": "Admin123!"})
+    respuesta = api.post("/api/auth/login", json={"correo": "admin@auroraviajes.com", "contrasena": CLAVE_ADMIN})
     assert respuesta.status_code == 200
     assert respuesta.json()["token"]
     assert respuesta.json()["usuario"]["rol"] == "administrador"
@@ -21,7 +22,7 @@ def test_login_con_contrasena_incorrecta(api):
 def test_login_de_cuenta_inactiva(api, admin, crear_cliente):
     cliente = crear_cliente()
     api.patch(f"/api/usuarios/{cliente.id}/estado", headers=admin, json={"activo": False})
-    respuesta = api.post("/api/auth/login", json={"correo": cliente.correo, "contrasena": "Cliente1!"})
+    respuesta = api.post("/api/auth/login", json={"correo": cliente.correo, "contrasena": CLAVE_CLIENTE})
     assert respuesta.status_code == 401
 
 
@@ -55,7 +56,7 @@ def test_recomendaciones_usan_el_catalogo_cuando_no_hay_ia(api, crear_cliente):
     assert len(datos["recomendaciones"]) == 3
 
 
-def test_un_error_inesperado_registra_la_traza_completa(api, admin, monkeypatch, caplog):
+def test_un_error_inesperado_registra_la_traza_completa(api, admin, catalogo, monkeypatch, caplog):
     """Regresión: el manejador era síncrono y el log decía «NoneType: None» en lugar de la excepción."""
     def falla(*_):
         raise RuntimeError("fallo de prueba")
@@ -65,10 +66,7 @@ def test_un_error_inesperado_registra_la_traza_completa(api, admin, monkeypatch,
 
     monkeypatch.setattr("app.routers.viajes.generar_numero_vuelo", falla_async)
     with caplog.at_level(logging.ERROR):
-        respuesta = api.post("/api/vuelos", headers=admin, json={
-            "aerolinea": "Aurora Airlines", "avion": "Airbus A320", "origen": "Bogotá", "destino": "París",
-            "fechaSalida": "2030-01-01T08:00:00", "fechaLlegada": "2030-01-01T20:00:00",
-        })
+        respuesta = api.post("/api/vuelos", headers=admin, json=cuerpo_de_vuelo(catalogo, catalogo.bogota, catalogo.paris, "2040-01-01T08:00:00"))
     assert respuesta.status_code == 500
     assert respuesta.json()["codigo"] == "error_interno"
     assert "RuntimeError: fallo de prueba" in caplog.text

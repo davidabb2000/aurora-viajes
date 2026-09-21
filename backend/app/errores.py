@@ -47,3 +47,12 @@ class ServicioNoDisponible(ErrorDeDominio):
     """Una integración necesaria no está configurada o no responde."""
 
     codigo = "servicio_no_disponible"
+
+
+class CambioDeContrasenaRequerido(PermisoDenegado):
+    """La cuenta usa una clave provisional: hasta cambiarla solo puede acceder a esa operación."""
+
+    codigo = "cambio_de_contrasena_requerido"
+
+    def __init__(self):
+        super().__init__("Debes cambiar tu contraseña antes de continuar.")

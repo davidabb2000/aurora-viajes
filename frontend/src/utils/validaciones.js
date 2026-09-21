@@ -1,28 +1,32 @@
-// Expresiones regulares reutilizadas en los formularios.
-export const REGEX_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-export const REGEX_SOLO_LETRAS = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/;
+// Reglas de los formularios. Repiten las del backend para avisar mientras se escribe; el servidor
+// las vuelve a aplicar siempre, así que estas nunca son la única defensa.
+export const REGEX_CORREO = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+export const REGEX_NOMBRE = /^[A-Za-zÁÉÍÓÚÜáéíóúüÑñ][A-Za-zÁÉÍÓÚÜáéíóúüÑñ '-]*$/;
 export const REGEX_SOLO_NUMEROS = /^[0-9]+$/;
 export const REGEX_TELEFONO = /^[0-9]{7,10}$/;
-export const REGEX_DIRECCION = /^[A-Za-zÁÉÍÓÚáéíóúÑñ0-9#\-.,\s]+$/;
-// Mínimo 8 caracteres, al menos una mayúscula, una minúscula, un número y un símbolo.
-export const REGEX_CONTRASENA = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$/;
+export const REGEX_DIRECCION = /^[A-Za-zÁÉÍÓÚÜáéíóúüÑñ0-9#\-.,°\s]+$/;
+
+export const LONGITUD_MINIMA_CONTRASENA = 8;
+export const LONGITUD_MAXIMA_CONTRASENA = 128;
 
 export function validarRequerido(valor) {
   return valor && valor.trim().length > 0 ? "" : "Este campo es obligatorio.";
 }
 
 export function validarNombre(valor, etiqueta = "El nombre") {
-  if (!valor.trim()) return "Este campo es obligatorio.";
-  if (valor.trim().length < 2) return `${etiqueta} debe tener al menos 2 caracteres.`;
-  if (valor.trim().length > 40) return `${etiqueta} no puede superar 40 caracteres.`;
-  if (!REGEX_SOLO_LETRAS.test(valor)) return `${etiqueta} solo puede contener letras.`;
+  const limpio = valor.trim().replace(/\s+/g, " ");
+  if (!limpio) return "Este campo es obligatorio.";
+  if (limpio.length < 2) return `${etiqueta} debe tener al menos 2 caracteres.`;
+  if (limpio.length > 40) return `${etiqueta} no puede superar 40 caracteres.`;
+  if (!REGEX_NOMBRE.test(limpio)) return `${etiqueta} solo puede tener letras, espacios, apóstrofes y guiones.`;
   return "";
 }
 
 export function validarCorreo(valor) {
-  if (!valor.trim()) return "Este campo es obligatorio.";
-  if (valor.length > 60) return "El correo no puede superar 60 caracteres.";
-  if (!REGEX_CORREO.test(valor)) return "Ingresa un correo electrónico válido.";
+  const limpio = valor.trim();
+  if (!limpio) return "Este campo es obligatorio.";
+  if (limpio.length > 60) return "El correo no puede superar 60 caracteres.";
+  if (!REGEX_CORREO.test(limpio)) return "Ingresa un correo electrónico válido.";
   return "";
 }
 
@@ -40,20 +44,72 @@ export function validarTelefono(valor) {
 }
 
 export function validarDireccion(valor) {
-  if (!valor.trim()) return "Este campo es obligatorio.";
-  if (valor.trim().length < 5) return "La dirección debe tener al menos 5 caracteres.";
-  if (valor.length > 80) return "La dirección no puede superar 80 caracteres.";
-  if (!REGEX_DIRECCION.test(valor)) return "La dirección contiene caracteres no permitidos.";
+  const limpio = valor.trim().replace(/\s+/g, " ");
+  if (!limpio) return "Este campo es obligatorio.";
+  if (limpio.length < 5) return "La dirección debe tener al menos 5 caracteres.";
+  if (limpio.length > 80) return "La dirección no puede superar 80 caracteres.";
+  if (!REGEX_DIRECCION.test(limpio)) return "La dirección contiene caracteres no permitidos.";
   return "";
 }
 
-export function validarContrasena(valor) {
+const simplificar = (texto = "") =>
+  texto
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+/**
+ * Lista de reglas de contraseña con su estado, para mostrarlas mientras se escribe.
+ * `contexto` permite comprobar que la clave no contenga el correo ni el nombre.
+ */
+export function reglasDeContrasena(valor = "", { correo = "", nombre = "", apellido = "" } = {}) {
+  const simple = simplificar(valor);
+  const local = simplificar(correo.split("@")[0]);
+  const datosPersonales = [local, simplificar(nombre), simplificar(apellido)].filter((dato) => dato.length >= 4);
+  return [
+    {
+      id: "longitud",
+      texto: `Entre ${LONGITUD_MINIMA_CONTRASENA} y ${LONGITUD_MAXIMA_CONTRASENA} caracteres`,
+      mensaje: `Debe tener entre ${LONGITUD_MINIMA_CONTRASENA} y ${LONGITUD_MAXIMA_CONTRASENA} caracteres.`,
+      cumple: valor.length >= LONGITUD_MINIMA_CONTRASENA && valor.length <= LONGITUD_MAXIMA_CONTRASENA,
+    },
+    {
+      id: "mayusculas",
+      texto: "Mayúsculas y minúsculas",
+      mensaje: "Debe combinar mayúsculas y minúsculas.",
+      cumple: /[a-zñáéíóúü]/.test(valor) && /[A-ZÑÁÉÍÓÚÜ]/.test(valor),
+    },
+    { id: "numero", texto: "Al menos un número", mensaje: "Debe incluir al menos un número.", cumple: /\d/.test(valor) },
+    {
+      id: "especial",
+      texto: "Al menos un carácter especial",
+      mensaje: "Debe incluir al menos un carácter especial.",
+      cumple: /[^\p{L}\p{N}]/u.test(valor),
+    },
+    {
+      id: "personal",
+      texto: "No contiene tu correo ni tu nombre",
+      mensaje: "No puede contener tu correo ni tu nombre.",
+      cumple: !datosPersonales.some((dato) => simple.includes(dato)),
+    },
+  ];
+}
+
+export function validarContrasena(valor, contexto) {
   if (!valor) return "Este campo es obligatorio.";
-  if (valor.length < 8 || valor.length > 20) return "Debe tener entre 8 y 20 caracteres.";
-  if (!REGEX_CONTRASENA.test(valor)) {
-    return "Debe incluir mayúscula, minúscula, número y un carácter especial.";
-  }
-  return "";
+  const incumplida = reglasDeContrasena(valor, contexto).find((regla) => !regla.cumple);
+  return incumplida ? incumplida.mensaje : "";
+}
+
+/** De 0 (vacía) a 4 (muy robusta): cuenta las reglas cumplidas y premia la longitud. */
+export function fortalezaDeContrasena(valor = "", contexto) {
+  if (!valor) return { puntaje: 0, etiqueta: "" };
+  const cumplidas = reglasDeContrasena(valor, contexto).filter((regla) => regla.cumple).length;
+  let puntaje = Math.min(cumplidas - 1, 3);
+  if (cumplidas === 5 && valor.length >= 12) puntaje = 4;
+  puntaje = Math.max(puntaje, 1);
+  return { puntaje, etiqueta: ["", "Débil", "Regular", "Buena", "Muy robusta"][puntaje] };
 }
 
 export function validarConfirmacionContrasena(valor, contrasena) {

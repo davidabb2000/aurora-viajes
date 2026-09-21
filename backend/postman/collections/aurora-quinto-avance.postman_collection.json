@@ -8,7 +8,15 @@
     { "key": "token", "value": "" },
     { "key": "ventaId", "value": "1" },
     { "key": "facturaId", "value": "1" },
-    { "key": "pqrId", "value": "1" }
+    { "key": "pqrId", "value": "1" },
+    {
+      "key": "adminEmail",
+      "value": "admin@auroraviajes.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    }
   ],
   "item": [
     {
@@ -16,7 +24,7 @@
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"correo\": \"admin@auroraviajes.com\",\n  \"contrasena\": \"Admin123!\"\n}" },
+        "body": { "mode": "raw", "raw": "{\n  \"correo\": \"{{adminEmail}}\",\n  \"contrasena\": \"{{adminPassword}}\"\n}" },
         "url": "{{baseUrl}}/auth/login"
       }
     },

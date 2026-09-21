@@ -41,17 +41,17 @@ function PagoReserva() {
 
   if (cargando) {
     return (
-      <main className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
+      <div className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
         <p className="vidrio rounded-2xl p-6 text-sm text-texto-suave">Preparando la pasarela de pago...</p>
-      </main>
+      </div>
     );
   }
 
   if (!reserva) {
     return (
-      <main className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
+      <div className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
         <p className="vidrio rounded-2xl border-red-200 p-6 text-sm text-red-700">{error || "No se pudo cargar la reserva."}</p>
-      </main>
+      </div>
     );
   }
 
@@ -59,7 +59,7 @@ function PagoReserva() {
   const cancelada = reserva.estado === "cancelada";
 
   return (
-    <main className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
+    <div className="mx-auto w-[92%] max-w-3xl flex-1 py-12 sm:py-16">
       <section className="vidrio rounded-3xl p-6 sm:p-9">
         <span className="antetitulo">{yaPagada ? "Pago registrado" : cancelada ? "Reserva cancelada" : "Checkout seguro"}</span>
         <h1 className="mt-3 text-4xl sm:text-5xl">
@@ -98,20 +98,25 @@ function PagoReserva() {
               Ir a mi panel
             </Link>
           ) : (
-            <button
-              type="button"
-              onClick={() => window.location.assign(checkoutUrl)}
-              disabled={!checkoutUrl}
-              className="boton-tinta px-6 py-3 font-semibold"
-            >
-              Ir a Stripe Checkout
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => window.location.assign(checkoutUrl)}
+                disabled={!checkoutUrl}
+                className="boton-tinta px-6 py-3 font-semibold"
+              >
+                Ir a Stripe Checkout
+              </button>
+              <Link to="/panel" className="rounded-full border border-primario/25 px-6 py-3 font-semibold text-primario no-underline transition hover:bg-primario/5">
+                Pagar más tarde
+              </Link>
+            </>
           )}
         </div>
         {error && <p className="mt-4 rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm font-medium text-red-700 backdrop-blur-sm">{error}</p>}
         {!yaPagada && !cancelada && <p className="mt-5 text-sm text-texto-suave">Al volver desde Stripe, la reserva se confirma automáticamente.</p>}
       </section>
-    </main>
+    </div>
   );
 }
 

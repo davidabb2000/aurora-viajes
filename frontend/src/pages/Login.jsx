@@ -1,185 +1,138 @@
 import { useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import AuthShell from "../components/auth/AuthShell";
 import Input from "../components/Input";
 import Button from "../components/Button";
-import RecoverPassword from "../components/RecoverPassword";
-import RegisterModal from "../components/RegisterModal";
 import { validarCorreo, validarRequerido } from "../utils/validaciones";
 import { solicitar } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 
-const VALORES_INICIALES = { correo: "", contrasena: "" };
-
+/**
+ * Inicio de sesión de clientes. Al entrar, `SoloInvitados` (en App.jsx) lleva a la página de donde
+ * venía o a la del rol; una cuenta con clave provisional va a cambiarla antes que nada.
+ */
 function Login() {
-  const { iniciarSesion, cerrarSesion } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [vista, setVista] = useState("login"); // "login" | "recuperar"
-  const [registroAbierto, setRegistroAbierto] = useState(false);
-
-  const [valores, setValores] = useState(VALORES_INICIALES);
+  const { iniciarSesion } = useAuth();
+  const ubicacion = useLocation();
+  const [valores, setValores] = useState({ correo: "", contrasena: "" });
   const [errores, setErrores] = useState({});
   const [tocados, setTocados] = useState({});
   const [recordarme, setRecordarme] = useState(false);
-  const [sesionIniciada, setSesionIniciada] = useState(false);
+  const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [mensajeError, setMensajeError] = useState("");
   const [cargando, setCargando] = useState(false);
-  const [mostrarContrasena, setMostrarContrasena] = useState(false);
+
+  const validar = (nombre, valor) => (nombre === "correo" ? validarCorreo(valor) : validarRequerido(valor));
 
   const manejarCambio = (evento) => {
     const { name, value } = evento.target;
-    const nuevosValores = { ...valores, [name]: value };
-    setValores(nuevosValores);
-
-    if (tocados[name]) {
-      const error = name === "correo" ? validarCorreo(value) : validarRequerido(value);
-      setErrores((prev) => ({ ...prev, [name]: error }));
-    }
+    setValores((actual) => ({ ...actual, [name]: value }));
+    if (tocados[name]) setErrores((actual) => ({ ...actual, [name]: validar(name, value) }));
   };
 
   const manejarBlur = (evento) => {
     const { name, value } = evento.target;
-    setTocados((prev) => ({ ...prev, [name]: true }));
-    const error = name === "correo" ? validarCorreo(value) : validarRequerido(value);
-    setErrores((prev) => ({ ...prev, [name]: error }));
+    setTocados((actual) => ({ ...actual, [name]: true }));
+    setErrores((actual) => ({ ...actual, [name]: validar(name, value) }));
   };
 
   const manejarEnvio = async (evento) => {
     evento.preventDefault();
-    const nuevosErrores = {
-      correo: validarCorreo(valores.correo),
-      contrasena: validarRequerido(valores.contrasena),
-    };
+    const nuevosErrores = { correo: validar("correo", valores.correo), contrasena: validar("contrasena", valores.contrasena) };
     setErrores(nuevosErrores);
     setTocados({ correo: true, contrasena: true });
-
-    const hayErrores = Object.values(nuevosErrores).some(Boolean);
-    if (hayErrores) return;
+    if (Object.values(nuevosErrores).some(Boolean)) return;
     setMensajeError("");
     setCargando(true);
     try {
       const datos = await solicitar("/auth/login", {
         method: "POST",
-        body: JSON.stringify(valores),
+        body: JSON.stringify({ correo: valores.correo.trim(), contrasena: valores.contrasena }),
       });
       iniciarSesion(datos, recordarme);
-      // Quien llegó desde una página protegida (p. ej. una tarjeta de destino) vuelve a ella.
-      if (location.state?.desde) {
-        navigate(location.state.desde, { replace: true });
-        return;
-      }
-      setSesionIniciada(true);
     } catch (error) {
       setMensajeError(error.message);
-    } finally {
       setCargando(false);
     }
   };
 
+  const estado = ubicacion.state?.desde ? { desde: ubicacion.state.desde } : undefined;
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-4 py-14">
-      <div className="vidrio w-full max-w-md rounded-3xl p-7 sm:p-9">
-        <NavLink to="/" className="mb-6 flex items-center justify-center gap-2.5 font-display text-2xl no-underline">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-oro text-lg text-primario">✦</span>
-          <span className="titulo-aurora">Aurora Viajes</span>
-        </NavLink>
-        <span className="antetitulo">Bienvenido de vuelta</span>
-        <h1 className="mb-6 mt-3 font-display text-3xl sm:text-4xl">
-          <span className="titulo-aurora">{vista === "login" ? "Inicia sesión" : "Recuperar contraseña"}</span>
-        </h1>
+    <AuthShell
+      etiqueta="Bienvenido de vuelta"
+      titulo="Inicia sesión"
+      subtitulo={ubicacion.state?.desde ? "Inicia sesión para continuar con tu reserva." : "Entra para ver tus reservas y planear tu próximo viaje."}
+      pie={
+        <>
+          ¿No tienes cuenta?{" "}
+          <Link to="/registro" state={estado} className="font-semibold text-primario hover:underline">
+            Crear una cuenta
+          </Link>
+          <p className="mt-3 text-xs">
+            ¿Eres parte del equipo?{" "}
+            <Link to="/acceso-personal" className="font-medium text-primario-suave hover:text-primario hover:underline">
+              Acceso del personal
+            </Link>
+          </p>
+        </>
+      }
+    >
+      <form className="flex flex-col gap-5" onSubmit={manejarEnvio} noValidate>
+        <Input
+          label="Correo electrónico"
+          name="correo"
+          type="email"
+          value={valores.correo}
+          onChange={manejarCambio}
+          onBlur={manejarBlur}
+          error={tocados.correo ? errores.correo : ""}
+          required
+          placeholder="tucorreo@ejemplo.com"
+          autoComplete="email"
+          autoFocus
+        />
+        <Input
+          label="Contraseña"
+          name="contrasena"
+          type={mostrarContrasena ? "text" : "password"}
+          value={valores.contrasena}
+          onChange={manejarCambio}
+          onBlur={manejarBlur}
+          error={tocados.contrasena ? errores.contrasena : ""}
+          required
+          placeholder="Tu contraseña"
+          autoComplete="current-password"
+          botonContrasena
+          mostrarContrasena={mostrarContrasena}
+          cambiarVisibilidad={() => setMostrarContrasena((visible) => !visible)}
+        />
 
-        {vista === "recuperar" ? (
-          <RecoverPassword alVolver={() => setVista("login")} />
-        ) : sesionIniciada ? (
-          <div className="flex flex-col items-center gap-4 py-4 text-center">
-            <p className="text-2xl">👋</p>
-            <p className="text-sm text-texto-suave">
-              ¡Sesión iniciada correctamente con{" "}
-              <span className="font-semibold text-texto">{valores.correo}</span>!
-            </p>
-            <Button
-              variant="secundario"
-              onClick={() => {
-                cerrarSesion();
-                setSesionIniciada(false);
-                setValores(VALORES_INICIALES);
-                setTocados({});
-              }}
-            >
-              Cerrar sesión
-            </Button>
-          </div>
-        ) : (
-          <form className="flex flex-col gap-5" onSubmit={manejarEnvio} noValidate>
-            <Input
-              label="Correo electrónico"
-              name="correo"
-              type="email"
-              value={valores.correo}
-              onChange={manejarCambio}
-              onBlur={manejarBlur}
-              error={tocados.correo ? errores.correo : ""}
-              required
-              placeholder="tucorreo@ejemplo.com"
-              autoComplete="email"
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <label className="flex items-center gap-2 text-texto-suave">
+            <input
+              type="checkbox"
+              checked={recordarme}
+              onChange={(evento) => setRecordarme(evento.target.checked)}
+              className="h-4 w-4 rounded border-primario/12 accent-primario"
             />
+            Recordarme en este equipo
+          </label>
+          <Link to="/recuperar" className="font-medium text-primario-suave hover:text-primario hover:underline">
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </div>
 
-            <Input
-              label="Contraseña"
-              name="contrasena"
-              type={mostrarContrasena ? "text" : "password"}
-              value={valores.contrasena}
-              onChange={manejarCambio}
-              onBlur={manejarBlur}
-              error={tocados.contrasena ? errores.contrasena : ""}
-              required
-              placeholder="Tu contraseña"
-              autoComplete="current-password"
-              botonContrasena
-              mostrarContrasena={mostrarContrasena}
-              cambiarVisibilidad={() => setMostrarContrasena((visible) => !visible)}
-            />
-
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-texto-suave">
-                <input
-                  type="checkbox"
-                  checked={recordarme}
-                  onChange={(evento) => setRecordarme(evento.target.checked)}
-                  className="h-4 w-4 rounded border-primario/12 accent-primario"
-                />
-                Recordarme
-              </label>
-              <button
-                type="button"
-                onClick={() => setVista("recuperar")}
-                className="font-medium text-primario-suave hover:text-primario hover:underline"
-              >
-                ¿Olvidaste tu contraseña?
-              </button>
-            </div>
-
-            <Button type="submit" className="w-full">
-              {cargando ? "Validando..." : "Iniciar sesión"}
-            </Button>
-            {mensajeError && <p className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-center text-sm font-medium text-red-700 backdrop-blur-sm">{mensajeError}</p>}
-
-            <p className="text-center text-sm text-texto-suave">
-              ¿No tienes cuenta?{" "}
-              <button
-                type="button"
-                onClick={() => setRegistroAbierto(true)}
-                className="font-semibold text-primario hover:underline"
-              >
-                Crear una cuenta
-              </button>
-            </p>
-          </form>
+        <Button type="submit" className="w-full" disabled={cargando}>
+          {cargando ? "Validando..." : "Iniciar sesión"}
+        </Button>
+        {mensajeError && (
+          <p role="alert" className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-center text-sm font-medium text-red-700 backdrop-blur-sm">
+            {mensajeError}
+          </p>
         )}
-      </div>
-
-      <RegisterModal abierto={registroAbierto} alCerrar={() => setRegistroAbierto(false)} />
-    </div>
+      </form>
+    </AuthShell>
   );
 }
 

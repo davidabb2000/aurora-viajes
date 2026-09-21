@@ -1,7 +1,11 @@
-"""Arranque de la base: crea el esquema, siembra el catálogo y migra bases antiguas."""
+"""Arranque de la base: crea el esquema, migra bases antiguas y siembra el catálogo de ejemplo.
+
+Todo es idempotente y **no pisa lo que el administrador haya cambiado**: cada dato de ejemplo se
+crea solo si falta. Antes cada arranque volvía a poner el precio, la descripción y el estado
+«activo» de los destinos, deshaciendo las ediciones.
+"""
 import logging
-import re
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select, text
@@ -9,11 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.base_datos import Base, FabricaDeSesiones, motor
 from app.core.configuracion import configuracion
+from app.core.politica_contrasena import CONTRASENAS_COMUNES
 from app.core.seguridad import hashear_contrasena, verificar_contrasena
 from app.models.dominio import (
-    Destino, EstadoPago, EstadoReserva, Excursion, Hotel, MetodoPago, Pais, Paquete, Permiso,
-    Role, TipoDocumento, User, Vuelo,
+    Aerolinea, Ciudad, Destino, EstadoPago, EstadoReserva, Excursion, Hotel, MetodoPago, ModeloAvion, Pais, Paquete,
+    Permiso, Role, TipoDocumento, User, Vuelo,
 )
+from app.services.catalogos import ahora, normalizar_texto
+from app.services.migraciones import migrar_esquema
 
 
 logger = logging.getLogger("aurora-viajes")
@@ -31,560 +38,399 @@ TIPOS_DOCUMENTO_SEMILLA = [
     ("PA", "Pasaporte"),
 ]
 
-PAISES_Y_DESTINOS_SEMILLA = [
-    ("Francia", "París, Francia", "Recorre el Sena al atardecer y descubre por qué la Ciudad Luz sigue inspirando a viajeros de todo el mundo.", "paris", Decimal("6900000")),
-    ("Japón", "Kioto, Japón", "Templos centenarios, jardines de piedra y la calma de los bosques de bambú te esperan en el antiguo Japón.", "kioto", Decimal("8400000")),
-    ("Indonesia", "Bali, Indonesia", "Playas volcánicas, arrozales en terraza y una cultura espiritual que transforma cada visita en un ritual.", "bali", Decimal("7600000")),
-    ("Colombia", "Cartagena, Colombia", "Murallas coloniales, calles de colores y el Caribe a un paso: la joya histórica de Colombia.", "cartagena", Decimal("1200000")),
-    ("Grecia", "Santorini, Grecia", "Casas blancas suspendidas sobre el mar Egeo y atardeceres que se han vuelto leyenda.", "santorini", Decimal("9800000")),
-    ("Perú", "Cusco, Perú", "Puerta de entrada a Machu Picchu y corazón del imperio inca, entre montañas y terrazas ancestrales.", "cusco", Decimal("2500000")),
-    ("Marruecos", "Marrakech, Marruecos", "Zocos bulliciosos, palacios ocultos y el aroma a especias en cada esquina de la medina.", "marrakech", Decimal("8900000")),
-    ("Islandia", "Reikiavik, Islandia", "Auroras boreales, fuentes termales y paisajes volcánicos al borde del Atlántico Norte.", "reikiavik", Decimal("10800000")),
-    ("Estados Unidos", "Nueva York, EE. UU.", "Rascacielos icónicos, parques urbanos y una energía que nunca duerme.", "nueva-york", Decimal("7200000")),
-    ("Egipto", "El Cairo, Egipto", "Las pirámides de Giza y el Nilo milenario te acercan a una de las civilizaciones más fascinantes de la historia.", "cairo", Decimal("9300000")),
-]
-
-VUELOS_SEMILLA = [
-    ("AV101", "Aurora Airlines", "Airbus A320", "Bogotá", "París", datetime(2026, 10, 5, 8, 30), datetime(2026, 10, 5, 23, 15), 180, "A12", "1"),
-    ("AV202", "Aurora Airlines", "Boeing 787", "Bogotá", "Tokio", datetime(2026, 10, 12, 10, 0), datetime(2026, 10, 13, 8, 30), 260, "B04", "2"),
-]
-
-PAQUETES_PUBLICADOS_SEMILLA = [
-    ("París, Francia", "AUR301", "Bogotá", "París", "Hotel Lumière Aurora", "París", "Francia", 5, 480000, ("Crucero nocturno por el Sena", 3, 180000), ("Ruta de arte en Montmartre", 4, 145000), ("Versalles y sus jardines", 6, 220000)),
-    ("Kioto, Japón", "AUR302", "Bogotá", "Kioto", "Ryokan Sakura Aurora", "Kioto", "Japón", 4, 390000, ("Ceremonia del té tradicional", 3, 165000), ("Bosque de bambú de Arashiyama", 5, 210000), ("Nara y sus templos", 8, 260000)),
-    ("Bali, Indonesia", "AUR303", "Bogotá", "Bali", "Ubud Rice Terrace Resort", "Bali", "Indonesia", 5, 310000, ("Amanecer en el monte Batur", 7, 240000), ("Templos y arrozales de Ubud", 6, 190000), ("Snorkel en Nusa Penida", 8, 280000)),
-    ("Cartagena, Colombia", "AUR304", "Bogotá", "Cartagena", "Casa del Mar Boutique", "Cartagena", "Colombia", 4, 280000, ("Recorrido por la ciudad amurallada", 3, 85000), ("Atardecer en la bahía", 2, 110000), ("Islas del Rosario", 8, 230000)),
-    ("Santorini, Grecia", "AUR305", "Bogotá", "Santorini", "Aegean White Suites", "Santorini", "Grecia", 5, 520000, ("Caldera y pueblos blancos", 5, 220000), ("Cata de vinos volcánicos", 4, 195000), ("Paseo en catamarán", 7, 290000)),
-    ("Cusco, Perú", "AUR306", "Bogotá", "Cusco", "Andenes del Sol Hotel", "Cusco", "Perú", 4, 250000, ("Machu Picchu en tren", 10, 420000), ("Valle Sagrado de los Incas", 8, 260000), ("Montaña de siete colores", 12, 230000)),
-    ("Marrakech, Marruecos", "AUR307", "Bogotá", "Marrakech", "Riad Medina Aurora", "Marrakech", "Marruecos", 4, 300000, ("Sabores de la medina", 4, 150000), ("Palacio de la Bahía y zocos", 5, 130000), ("Desierto de Agafay", 8, 250000)),
-    ("Reikiavik, Islandia", "AUR308", "Bogotá", "Reikiavik", "Northern Lights Lodge", "Reikiavik", "Islandia", 4, 430000, ("Cacería de auroras boreales", 5, 260000), ("Círculo dorado", 8, 290000), ("Laguna Azul y costa volcánica", 7, 310000)),
-    ("Nueva York, EE. UU.", "AUR309", "Bogotá", "Nueva York", "Manhattan Skyline Hotel", "Nueva York", "EE. UU.", 4, 560000, ("Manhattan y Central Park", 6, 210000), ("Luces de Broadway", 4, 280000), ("Estatua de la Libertad", 5, 190000)),
-    ("El Cairo, Egipto", "AUR310", "Bogotá", "El Cairo", "Nile View Palace", "El Cairo", "Egipto", 5, 270000, ("Pirámides de Giza y esfinge", 6, 230000), ("Museo Egipcio y bazar Khan el Khalili", 5, 170000), ("Crucero al atardecer por el Nilo", 3, 155000)),
-]
-
-ESTADOS_RESERVA_SEMILLA = [
-    ("pendiente", "Pendiente"),
-    ("confirmada", "Confirmada"),
-    ("cancelada", "Cancelada"),
-]
-
-ESTADOS_PAGO_SEMILLA = [
-    ("pendiente", "Pendiente"),
-    ("pagado", "Pagado"),
-    ("fallido", "Fallido"),
-]
-
+ESTADOS_RESERVA_SEMILLA = [("pendiente", "Pendiente"), ("confirmada", "Confirmada"), ("cancelada", "Cancelada")]
+ESTADOS_PAGO_SEMILLA = [("pendiente", "Pendiente"), ("pagado", "Pagado"), ("fallido", "Fallido")]
 METODOS_PAGO_SEMILLA = [
     ("stripe", "Stripe"),
     ("transferencia", "Transferencia"),
+    ("efectivo", "Efectivo"),
+    ("tarjeta", "Tarjeta (datáfono)"),
 ]
+
+AEROLINEAS_SEMILLA = [
+    ("AUR", "Aurora Airlines"),
+    ("AV", "Avianca"),
+    ("LA", "LATAM"),
+    ("CM", "Copa Airlines"),
+    ("IB", "Iberia"),
+]
+
+# La capacidad física es de cada modelo; el vuelo vende como máximo esas plazas.
+MODELOS_AVION_SEMILLA = [
+    ("Airbus A320", 180),
+    ("Airbus A330", 300),
+    ("Boeing 737", 189),
+    ("Boeing 787", 330),
+    ("Embraer E195", 132),
+]
+
+# Ciudades desde las que se puede salir. Cartagena también es destino: es la misma ciudad.
+ORIGENES_SEMILLA = [
+    ("Colombia", "Bogotá"), ("Colombia", "Medellín"), ("Colombia", "Cali"), ("Colombia", "Barranquilla"),
+    ("Colombia", "Cartagena"), ("Perú", "Lima"), ("España", "Madrid"),
+]
+ORIGEN_PRINCIPAL = ("Colombia", "Bogotá")
+
+DESTINOS_SEMILLA = [
+    {
+        "pais": "Francia", "ciudad": "París", "slug": "paris", "precio": Decimal("6900000"), "vuelo": "AUR301",
+        "descripcion": "Recorre el Sena al atardecer y descubre por qué la Ciudad Luz sigue inspirando a viajeros de todo el mundo.",
+        "hoteles": [("Hotel Lumière Aurora", 5, 480000), ("Hôtel Petit Rivoli", 3, 220000)],
+        "excursiones": [("Crucero nocturno por el Sena", 3, 180000), ("Ruta de arte en Montmartre", 4, 145000), ("Versalles y sus jardines", 6, 220000)],
+    },
+    {
+        "pais": "Japón", "ciudad": "Kioto", "slug": "kioto", "precio": Decimal("8400000"), "vuelo": "AUR302",
+        "descripcion": "Templos centenarios, jardines de piedra y la calma de los bosques de bambú te esperan en el antiguo Japón.",
+        "hoteles": [("Ryokan Sakura Aurora", 4, 390000), ("Kyoto Garden Inn", 3, 210000)],
+        "excursiones": [("Ceremonia del té tradicional", 3, 165000), ("Bosque de bambú de Arashiyama", 5, 210000), ("Nara y sus templos", 8, 260000)],
+    },
+    {
+        "pais": "Indonesia", "ciudad": "Bali", "slug": "bali", "precio": Decimal("7600000"), "vuelo": "AUR303",
+        "descripcion": "Playas volcánicas, arrozales en terraza y una cultura espiritual que transforma cada visita en un ritual.",
+        "hoteles": [("Ubud Rice Terrace Resort", 5, 310000), ("Seminyak Beach Bungalows", 3, 160000)],
+        "excursiones": [("Amanecer en el monte Batur", 7, 240000), ("Templos y arrozales de Ubud", 6, 190000), ("Snorkel en Nusa Penida", 8, 280000)],
+    },
+    {
+        "pais": "Colombia", "ciudad": "Cartagena", "slug": "cartagena", "precio": Decimal("1200000"), "vuelo": "AUR304",
+        "descripcion": "Murallas coloniales, calles de colores y el Caribe a un paso: la joya histórica de Colombia.",
+        "hoteles": [("Casa del Mar Boutique", 4, 280000), ("Hostal Getsemaní Colonial", 3, 150000)],
+        "excursiones": [("Recorrido por la ciudad amurallada", 3, 85000), ("Atardecer en la bahía", 2, 110000), ("Islas del Rosario", 8, 230000)],
+    },
+    {
+        "pais": "Grecia", "ciudad": "Santorini", "slug": "santorini", "precio": Decimal("9800000"), "vuelo": "AUR305",
+        "descripcion": "Casas blancas suspendidas sobre el mar Egeo y atardeceres que se han vuelto leyenda.",
+        "hoteles": [("Aegean White Suites", 5, 520000), ("Oia Cave Rooms", 3, 260000)],
+        "excursiones": [("Caldera y pueblos blancos", 5, 220000), ("Cata de vinos volcánicos", 4, 195000), ("Paseo en catamarán", 7, 290000)],
+    },
+    {
+        "pais": "Perú", "ciudad": "Cusco", "slug": "cusco", "precio": Decimal("2500000"), "vuelo": "AUR306",
+        "descripcion": "Puerta de entrada a Machu Picchu y corazón del imperio inca, entre montañas y terrazas ancestrales.",
+        "hoteles": [("Andenes del Sol Hotel", 4, 250000), ("Plaza de Armas Hostal", 3, 120000)],
+        "excursiones": [("Machu Picchu en tren", 10, 420000), ("Valle Sagrado de los Incas", 8, 260000), ("Montaña de siete colores", 12, 230000)],
+    },
+    {
+        "pais": "Marruecos", "ciudad": "Marrakech", "slug": "marrakech", "precio": Decimal("8900000"), "vuelo": "AUR307",
+        "descripcion": "Zocos bulliciosos, palacios ocultos y el aroma a especias en cada esquina de la medina.",
+        "hoteles": [("Riad Medina Aurora", 4, 300000), ("Riad Jardin Secret", 3, 140000)],
+        "excursiones": [("Sabores de la medina", 4, 150000), ("Palacio de la Bahía y zocos", 5, 130000), ("Desierto de Agafay", 8, 250000)],
+    },
+    {
+        "pais": "Islandia", "ciudad": "Reikiavik", "slug": "reikiavik", "precio": Decimal("10800000"), "vuelo": "AUR308",
+        "descripcion": "Auroras boreales, fuentes termales y paisajes volcánicos al borde del Atlántico Norte.",
+        "hoteles": [("Northern Lights Lodge", 4, 430000), ("Reykjavik Harbor Guesthouse", 3, 230000)],
+        "excursiones": [("Cacería de auroras boreales", 5, 260000), ("Círculo dorado", 8, 290000), ("Laguna Azul y costa volcánica", 7, 310000)],
+    },
+    {
+        "pais": "Estados Unidos", "ciudad": "Nueva York", "slug": "nueva-york", "precio": Decimal("7200000"), "vuelo": "AUR309",
+        "descripcion": "Rascacielos icónicos, parques urbanos y una energía que nunca duerme.",
+        "hoteles": [("Manhattan Skyline Hotel", 4, 560000), ("Brooklyn Bridge Inn", 3, 300000)],
+        "excursiones": [("Manhattan y Central Park", 6, 210000), ("Luces de Broadway", 4, 280000), ("Estatua de la Libertad", 5, 190000)],
+    },
+    {
+        "pais": "Egipto", "ciudad": "El Cairo", "slug": "cairo", "precio": Decimal("9300000"), "vuelo": "AUR310",
+        "descripcion": "Las pirámides de Giza y el Nilo milenario te acercan a una de las civilizaciones más fascinantes de la historia.",
+        "hoteles": [("Nile View Palace", 5, 270000), ("Giza Pyramids View Inn", 3, 130000)],
+        "excursiones": [("Pirámides de Giza y esfinge", 6, 230000), ("Museo Egipcio y bazar Khan el Khalili", 5, 170000), ("Crucero al atardecer por el Nilo", 3, 155000)],
+    },
+]
+
+# La programación se renueva sola: el catálogo de ejemplo llevaba fechas fijas que acababan en el pasado
+# y, pasadas esas fechas, no quedaba ningún vuelo que reservar.
+DIAS_ENTRE_SALIDAS = 7
+DIAS_DE_ANTELACION = 10
+HORIZONTE_DE_VENTA_DIAS = 70
+
+CLAVE_DE_EJEMPLO = "Admin123!"
+
+
+def _es_clave_conocida(clave: str) -> bool:
+    return clave == CLAVE_DE_EJEMPLO or clave.lower() in CONTRASENAS_COMUNES
 
 
 def _clausula_no_duplicados(sesion: AsyncSession) -> str:
     return "INSERT IGNORE" if sesion.bind and sesion.bind.dialect.name == "mysql" else "INSERT OR IGNORE"
 
 
+async def _rechazar_sqlite_antigua(conexion) -> None:
+    """Una SQLite de desarrollo creada con una versión anterior no se migra: se avisa cómo recrearla."""
+    columnas = await conexion.execute(text("PRAGMA table_info(hoteles)"))
+    nombres = {fila[1] for fila in columnas.fetchall()}
+    if "ciudad" in nombres and "ciudad_id" not in nombres:
+        raise RuntimeError(
+            "La base SQLite local es de una versión anterior. Bórrala (por defecto ./aurora_viajes.db) "
+            "y arranca de nuevo: se creará con el esquema actual y sus datos de ejemplo."
+        )
+
+
 async def asegurar_base_inicial() -> None:
     async with motor.begin() as conexion:
+        if conexion.dialect.name == "sqlite":
+            await _rechazar_sqlite_antigua(conexion)
         await conexion.run_sync(Base.metadata.create_all)
-        for tabla in ("hoteles", "excursiones"):
-            if conexion.dialect.name == "mysql":
-                columnas = await conexion.execute(text(f"SHOW COLUMNS FROM {tabla} LIKE 'pais'"))
-                existe_pais = columnas.first() is not None
-            else:
-                columnas = await conexion.execute(text(f"PRAGMA table_info({tabla})"))
-                existe_pais = any(columna[1] == "pais" for columna in columnas.fetchall())
-            if not existe_pais:
-                posicion = " AFTER ciudad" if conexion.dialect.name == "mysql" else ""
-                await conexion.execute(text(f"ALTER TABLE {tabla} ADD COLUMN pais VARCHAR(120) NOT NULL DEFAULT ''{posicion}"))
     async with FabricaDeSesiones() as sesion:
-        clausula = _clausula_no_duplicados(sesion)
-
-        tipos_documento_cache: dict[str, TipoDocumento] = {}
-        for codigo, nombre in TIPOS_DOCUMENTO_SEMILLA:
-            tipo_documento = await sesion.scalar(select(TipoDocumento).where(TipoDocumento.codigo == codigo))
-            if tipo_documento is None:
-                tipo_documento = TipoDocumento(codigo=codigo, nombre=nombre)
-                sesion.add(tipo_documento)
-                await sesion.flush()
-            tipos_documento_cache[codigo] = tipo_documento
-
-        paises_cache: dict[str, Pais] = {}
-        for pais_nombre, *_resto in PAISES_Y_DESTINOS_SEMILLA:
-            pais = await sesion.scalar(select(Pais).where(Pais.nombre == pais_nombre))
-            if pais is None:
-                pais = Pais(nombre=pais_nombre)
-                sesion.add(pais)
-                await sesion.flush()
-            paises_cache[pais_nombre] = pais
-
-        destinos_cache: dict[str, Destino] = {}
-        for pais_nombre, nombre, descripcion, slug, precio_base in PAISES_Y_DESTINOS_SEMILLA:
-            destino = await sesion.scalar(select(Destino).where(Destino.nombre == nombre))
-            if destino is None:
-                destino = Destino(
-                    pais_id=paises_cache[pais_nombre].id,
-                    nombre=nombre,
-                    descripcion=descripcion,
-                    precio_base=precio_base,
-                    imagen_slug=slug,
-                    activo=True,
-                )
-                sesion.add(destino)
-                await sesion.flush()
-            else:
-                destino.pais_id = paises_cache[pais_nombre].id
-                destino.descripcion = descripcion
-                destino.precio_base = precio_base
-                destino.imagen_slug = slug
-                destino.activo = True
-            destinos_cache[nombre] = destino
-
-        for numero, aerolinea, avion, origen, destino, salida, llegada, capacidad, puerta, terminal in VUELOS_SEMILLA:
-            vuelo = await sesion.scalar(select(Vuelo).where(Vuelo.numero_vuelo == numero))
-            if vuelo is None:
-                sesion.add(
-                    Vuelo(
-                        numero_vuelo=numero,
-                        aerolinea=aerolinea,
-                        avion=avion,
-                        origen=origen,
-                        destino=destino,
-                        fecha_salida=salida,
-                        fecha_llegada=llegada,
-                        capacidad_maxima=capacidad,
-                        puerta=puerta,
-                        terminal=terminal,
-                        estado="programado",
-                        activo=True,
-                    )
-                )
-
-        for indice, datos in enumerate(PAQUETES_PUBLICADOS_SEMILLA):
-            (
-                destino_nombre, numero_vuelo, origen, ciudad, hotel_nombre, hotel_ciudad, hotel_pais,
-                estrellas, precio_noche, *datos_excursiones,
-            ) = datos
-            nombre_paquete = f"Aurora {destino_nombre.split(',')[0]}: experiencia completa"
-            paquete_existente = await sesion.scalar(select(Paquete).where(Paquete.nombre == nombre_paquete))
-            if paquete_existente is not None:
-                continue
-
-            destino = destinos_cache[destino_nombre]
-            fecha_salida = date(2026, 10, 5) + timedelta(days=4 * indice)
-            fecha_regreso = fecha_salida + timedelta(days=6 + indice % 3)
-            vuelo = await sesion.scalar(select(Vuelo).where(Vuelo.numero_vuelo == numero_vuelo))
-            if vuelo is None:
-                vuelo = Vuelo(
-                    numero_vuelo=numero_vuelo,
-                    aerolinea="Aurora Airlines",
-                    avion="Airbus A320" if indice % 2 == 0 else "Boeing 787",
-                    origen=origen,
-                    destino=ciudad,
-                    fecha_salida=datetime.combine(fecha_salida, time(7 + indice % 5, 30), tzinfo=timezone.utc),
-                    fecha_llegada=datetime.combine(fecha_salida, time(19 + indice % 3, 15), tzinfo=timezone.utc) + timedelta(days=1 if indice in (1, 5, 7) else 0),
-                    capacidad_maxima=180 if indice % 2 == 0 else 260,
-                    puerta=f"{chr(65 + indice % 4)}{10 + indice:02d}",
-                    terminal=str(1 + indice % 3),
-                    estado="programado",
-                    activo=True,
-                )
-                sesion.add(vuelo)
-                await sesion.flush()
-
-            hotel = await sesion.scalar(select(Hotel).where(Hotel.nombre == hotel_nombre))
-            if hotel is None:
-                hotel = Hotel(
-                    nombre=hotel_nombre,
-                    ciudad=hotel_ciudad,
-                    pais=hotel_pais,
-                    estrellas=estrellas,
-                    precio_noche=precio_noche,
-                    descripcion=f"Alojamiento seleccionado en {hotel_ciudad}, con desayuno, recepción 24 horas y ubicación estratégica para recorrer el destino.",
-                    activo=True,
-                )
-                sesion.add(hotel)
-                await sesion.flush()
-
-            excursiones = []
-            for numero_excursion, (nombre, duracion, precio) in enumerate(datos_excursiones, 1):
-                excursion = await sesion.scalar(select(Excursion).where(Excursion.nombre == nombre))
-                if excursion is None:
-                    excursion = Excursion(
-                        nombre=nombre,
-                        ciudad=hotel_ciudad,
-                        pais=hotel_pais,
-                        duracion_horas=duracion,
-                        precio=precio,
-                        descripcion=f"Experiencia guiada para conocer {hotel_ciudad} con acompañamiento local y tiempo para fotografías.",
-                        activo=True,
-                    )
-                    sesion.add(excursion)
-                    await sesion.flush()
-                excursiones.append(excursion)
-
-            precio_base = (Decimal(str(destino.precio_base)) * Decimal("1.12")).quantize(Decimal("0.01"))
-            sesion.add(
-                Paquete(
-                    nombre=nombre_paquete,
-                    destino_id=destino.id,
-                    vuelo_id=vuelo.id,
-                    hotel_id=hotel.id,
-                    fecha_salida=fecha_salida,
-                    fecha_regreso=fecha_regreso,
-                    precio_base=precio_base,
-                    activo=True,
-                    excursiones=excursiones,
-                )
-            )
-
-        estados_reserva_cache: dict[str, EstadoReserva] = {}
-        for codigo, nombre in ESTADOS_RESERVA_SEMILLA:
-            estado = await sesion.scalar(select(EstadoReserva).where(EstadoReserva.codigo == codigo))
-            if estado is None:
-                estado = EstadoReserva(codigo=codigo, nombre=nombre)
-                sesion.add(estado)
-                await sesion.flush()
-            estados_reserva_cache[codigo] = estado
-
-        estados_pago_cache: dict[str, EstadoPago] = {}
-        for codigo, nombre in ESTADOS_PAGO_SEMILLA:
-            estado = await sesion.scalar(select(EstadoPago).where(EstadoPago.codigo == codigo))
-            if estado is None:
-                estado = EstadoPago(codigo=codigo, nombre=nombre)
-                sesion.add(estado)
-                await sesion.flush()
-            estados_pago_cache[codigo] = estado
-
-        metodos_pago_cache: dict[str, MetodoPago] = {}
-        for codigo, nombre in METODOS_PAGO_SEMILLA:
-            metodo = await sesion.scalar(select(MetodoPago).where(MetodoPago.codigo == codigo))
-            if metodo is None:
-                metodo = MetodoPago(codigo=codigo, nombre=nombre)
-                sesion.add(metodo)
-                await sesion.flush()
-            metodos_pago_cache[codigo] = metodo
-
-        await _migrar_esquema_legacy(sesion)
-
-        roles_cache: dict[str, Role] = {}
-        for rol_nombre in PERMISOS_POR_ROL:
-            rol = await sesion.scalar(select(Role).where(Role.nombre == rol_nombre))
-            if rol is None:
-                rol = Role(nombre=rol_nombre)
-                sesion.add(rol)
-                await sesion.flush()
-            roles_cache[rol_nombre] = rol
-
-        permisos_cache: dict[str, Permiso] = {}
-        for permisos in PERMISOS_POR_ROL.values():
-            for permiso_nombre in permisos:
-                permiso = await sesion.scalar(select(Permiso).where(Permiso.nombre == permiso_nombre))
-                if permiso is None:
-                    permiso = Permiso(nombre=permiso_nombre)
-                    sesion.add(permiso)
-                    await sesion.flush()
-                permisos_cache[permiso_nombre] = permiso
-
-        for rol_nombre, permisos in PERMISOS_POR_ROL.items():
-            rol = roles_cache[rol_nombre]
-            for permiso_nombre in permisos:
-                permiso = permisos_cache[permiso_nombre]
-                await sesion.execute(
-                    text(
-                        f"{clausula} INTO rol_permisos (rol_id, permiso_id) VALUES (:rol_id, :permiso_id)"
-                    ),
-                    {"rol_id": rol.id, "permiso_id": permiso.id},
-                )
-
-        admin_role = roles_cache.get("administrador")
-        if admin_role is not None:
-            admin_email = configuracion.admin_email.lower()
-            admin_user = await sesion.scalar(select(User).where(User.correo == admin_email))
-            if admin_user is None:
-                sesion.add(
-                    User(
-                        nombre="Administrador",
-                        apellido="Aurora",
-                        tipo_documento_id=tipos_documento_cache["CC"].id,
-                        numero_documento="1000000000",
-                        direccion="Oficina principal Aurora Viajes",
-                        telefono="3000000000",
-                        correo=configuracion.admin_email.lower(),
-                        contrasena_hash=hashear_contrasena(configuracion.admin_password),
-                        rol_id=admin_role.id,
-                        activo=True,
-                    )
-                )
-            else:
-                admin_user.nombre = admin_user.nombre or "Administrador"
-                admin_user.apellido = admin_user.apellido or "Aurora"
-                admin_user.tipo_documento_id = tipos_documento_cache["CC"].id
-                admin_user.rol_id = admin_role.id
-                admin_user.activo = True
-                try:
-                    if not verificar_contrasena(configuracion.admin_password, admin_user.contrasena_hash):
-                        admin_user.contrasena_hash = hashear_contrasena(configuracion.admin_password)
-                except Exception:
-                    admin_user.contrasena_hash = hashear_contrasena(configuracion.admin_password)
-
+        await _sembrar_catalogos_base(sesion)
+        await migrar_esquema(sesion)  # solo MySQL; necesita que los catálogos anteriores ya existan
+        await _sembrar_destinos_y_alojamientos(sesion)
+        await _asegurar_programacion_de_vuelos(sesion)
+        await _asegurar_paquetes(sesion)
+        await _asegurar_roles_y_permisos(sesion)
+        await _asegurar_administrador(sesion)
         await sesion.commit()
 
 
-async def _columna_existe(sesion: AsyncSession, tabla: str, columna: str) -> bool:
-    if sesion.bind and sesion.bind.dialect.name == "mysql":
-        consulta = text(
-            "SELECT COUNT(*) FROM information_schema.columns "
-            "WHERE table_schema = DATABASE() AND table_name = :tabla AND column_name = :columna"
-        )
-        cantidad = await sesion.scalar(consulta, {"tabla": tabla, "columna": columna})
-        return bool(cantidad)
-    return False
+# --------------------------------------------------------------------------------------
+# Catálogos pequeños
+# --------------------------------------------------------------------------------------
 
 
-async def _restriccion_existe(sesion: AsyncSession, tabla: str, restriccion: str) -> bool:
-    if sesion.bind and sesion.bind.dialect.name == "mysql":
-        cantidad = await sesion.scalar(
-            text(
-                "SELECT COUNT(*) FROM information_schema.table_constraints "
-                "WHERE table_schema = DATABASE() AND table_name = :tabla "
-                "AND constraint_name = :restriccion"
-            ),
-            {"tabla": tabla, "restriccion": restriccion},
-        )
-        return bool(cantidad)
-    return False
-
-
-async def _migrar_esquema_legacy(sesion: AsyncSession) -> None:
-    if not sesion.bind or sesion.bind.dialect.name != "mysql":
-        return
-
-    # Columnas de hotel y desglose: create_all no altera tablas existentes.
-    if not await _columna_existe(sesion, "reservas", "hotel_id"):
-        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN hotel_id INT NULL AFTER paquete_id"))
-        await sesion.execute(
-            text(
-                "ALTER TABLE reservas ADD CONSTRAINT fk_reserva_hotel "
-                "FOREIGN KEY (hotel_id) REFERENCES hoteles(id) ON DELETE RESTRICT"
-            )
-        )
-    for columna in ("monto_vuelo", "monto_hotel", "monto_excursiones"):
-        if not await _columna_existe(sesion, "reservas", columna):
-            await sesion.execute(
-                text(f"ALTER TABLE reservas ADD COLUMN {columna} DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER monto_total")
-            )
-
-    if not await _columna_existe(sesion, "reservas", "paquete_id"):
-        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN paquete_id INT NULL AFTER vuelo_id"))
-        await sesion.execute(
-            text(
-                "ALTER TABLE reservas ADD CONSTRAINT fk_reserva_paquete "
-                "FOREIGN KEY (paquete_id) REFERENCES paquetes(id) ON DELETE RESTRICT"
-            )
-        )
-    else:
-        await sesion.execute(text("ALTER TABLE reservas MODIFY COLUMN paquete_id INT NULL"))
-        if not await _restriccion_existe(sesion, "reservas", "fk_reserva_paquete"):
-            await sesion.execute(
-                text(
-                    "ALTER TABLE reservas ADD CONSTRAINT fk_reserva_paquete "
-                    "FOREIGN KEY (paquete_id) REFERENCES paquetes(id) ON DELETE RESTRICT"
-                )
-            )
-
-    if await _columna_existe(sesion, "usuarios", "tipo_documento") and not await _columna_existe(sesion, "usuarios", "tipo_documento_id"):
-        await sesion.execute(text("ALTER TABLE usuarios ADD COLUMN tipo_documento_id INT UNSIGNED NULL AFTER apellido"))
-        tipos_legacy = await sesion.execute(
-            text("SELECT DISTINCT tipo_documento FROM usuarios WHERE tipo_documento IS NOT NULL AND tipo_documento <> ''")
-        )
-        for fila in tipos_legacy:
-            codigo = str(fila[0]).strip().upper()
-            if codigo:
-                await sesion.execute(
-                    text("INSERT IGNORE INTO tipos_documento (codigo, nombre) VALUES (:codigo, :nombre)"),
-                    {"codigo": codigo, "nombre": codigo},
-                )
-        await sesion.execute(
-            text(
-                "UPDATE usuarios u "
-                "JOIN tipos_documento td ON td.codigo = u.tipo_documento "
-                "SET u.tipo_documento_id = td.id"
-            )
-        )
-        await sesion.execute(
-            text(
-                "UPDATE usuarios u "
-                "JOIN tipos_documento td ON td.codigo = 'CC' "
-                "SET u.tipo_documento_id = td.id "
-                "WHERE u.tipo_documento_id IS NULL"
-            )
-        )
-        await sesion.execute(text("ALTER TABLE usuarios MODIFY tipo_documento_id INT UNSIGNED NOT NULL"))
-        await sesion.execute(text("ALTER TABLE usuarios DROP COLUMN tipo_documento"))
-
-    if await _columna_existe(sesion, "reservas", "destino") and not await _columna_existe(sesion, "reservas", "destino_id"):
-        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN destino_id INT UNSIGNED NULL AFTER usuario_id"))
-        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN estado_id INT UNSIGNED NULL AFTER notas"))
-        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN estado_pago_id INT UNSIGNED NULL AFTER estado_id"))
-        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN metodo_pago_id INT UNSIGNED NULL AFTER estado_pago_id"))
-
-        destinos_legacy = await sesion.execute(
-            text("SELECT DISTINCT destino FROM reservas WHERE destino IS NOT NULL AND destino <> ''")
-        )
-        for fila in destinos_legacy:
-            destino_nombre = str(fila[0]).strip()
-            if not destino_nombre:
-                continue
-            destino = await sesion.scalar(select(Destino).where(Destino.nombre == destino_nombre))
-            if destino is None:
-                pais_nombre = destino_nombre.split(",")[-1].strip() if "," in destino_nombre else "Colombia"
-                pais = await sesion.scalar(select(Pais).where(Pais.nombre == pais_nombre))
-                if pais is None:
-                    pais = Pais(nombre=pais_nombre)
-                    sesion.add(pais)
-                    await sesion.flush()
-                destino = Destino(
-                    pais_id=pais.id,
-                    nombre=destino_nombre,
-                    descripcion=destino_nombre,
-                    precio_base=Decimal("0"),
-                    imagen_slug=None,
-                    activo=True,
-                )
-                sesion.add(destino)
-                await sesion.flush()
-
-        for codigo, nombre in ESTADOS_RESERVA_SEMILLA:
-            estado = await sesion.scalar(select(EstadoReserva).where(EstadoReserva.codigo == codigo))
-            if estado is None:
-                estado = EstadoReserva(codigo=codigo, nombre=nombre)
-                sesion.add(estado)
-                await sesion.flush()
-        for codigo, nombre in ESTADOS_PAGO_SEMILLA:
-            estado = await sesion.scalar(select(EstadoPago).where(EstadoPago.codigo == codigo))
-            if estado is None:
-                estado = EstadoPago(codigo=codigo, nombre=nombre)
-                sesion.add(estado)
-                await sesion.flush()
-        for codigo, nombre in METODOS_PAGO_SEMILLA:
-            metodo = await sesion.scalar(select(MetodoPago).where(MetodoPago.codigo == codigo))
-            if metodo is None:
-                metodo = MetodoPago(codigo=codigo, nombre=nombre)
-                sesion.add(metodo)
-                await sesion.flush()
-
-        await sesion.execute(
-            text(
-                "UPDATE reservas r "
-                "JOIN destinos d ON d.nombre = r.destino "
-                "SET r.destino_id = d.id"
-            )
-        )
-        await sesion.execute(
-            text(
-                "UPDATE reservas r "
-                "JOIN estados_reserva er ON er.codigo = r.estado "
-                "SET r.estado_id = er.id"
-            )
-        )
-        await sesion.execute(
-            text(
-                "UPDATE reservas r "
-                "JOIN estados_pago ep ON ep.codigo = r.estado_pago "
-                "SET r.estado_pago_id = ep.id"
-            )
-        )
-        await sesion.execute(
-            text(
-                "UPDATE reservas r "
-                "LEFT JOIN metodos_pago mp ON mp.codigo = r.metodo_pago "
-                "SET r.metodo_pago_id = mp.id"
-            )
-        )
-        await sesion.execute(
-            text(
-                "UPDATE reservas r "
-                "JOIN destinos d ON d.id = r.destino_id "
-                "JOIN estados_reserva er ON er.codigo = 'pendiente' "
-                "JOIN estados_pago ep ON ep.codigo = 'pendiente' "
-                "SET r.destino_id = d.id, r.estado_id = COALESCE(r.estado_id, er.id), r.estado_pago_id = COALESCE(r.estado_pago_id, ep.id) "
-                "WHERE r.destino_id IS NULL OR r.estado_id IS NULL OR r.estado_pago_id IS NULL"
-            )
-        )
-        await sesion.execute(text("ALTER TABLE reservas MODIFY destino_id INT UNSIGNED NOT NULL"))
-        await sesion.execute(text("ALTER TABLE reservas MODIFY estado_id INT UNSIGNED NOT NULL"))
-        await sesion.execute(text("ALTER TABLE reservas MODIFY estado_pago_id INT UNSIGNED NOT NULL"))
-        await sesion.execute(text("ALTER TABLE reservas DROP COLUMN destino"))
-        await sesion.execute(text("ALTER TABLE reservas DROP COLUMN estado"))
-        await sesion.execute(text("ALTER TABLE reservas DROP COLUMN estado_pago"))
-        await sesion.execute(text("ALTER TABLE reservas DROP COLUMN metodo_pago"))
-
-    if not await _columna_existe(sesion, "reservas", "vuelo_id"):
-        await sesion.execute(text("ALTER TABLE reservas ADD COLUMN vuelo_id INT UNSIGNED NULL AFTER destino_id"))
-        await sesion.execute(
-            text(
-                "ALTER TABLE reservas ADD CONSTRAINT fk_reserva_vuelo "
-                "FOREIGN KEY (vuelo_id) REFERENCES vuelos(id) ON DELETE RESTRICT"
-            )
-        )
-
-    # Enlace venta -> reserva: permite que pagar o cancelar una reserva actualice su venta y su factura.
-    if not await _columna_existe(sesion, "ventas", "reserva_id"):
-        tipo_id = await sesion.scalar(
-            text(
-                "SELECT COLUMN_TYPE FROM information_schema.columns "
-                "WHERE table_schema = DATABASE() AND table_name = 'reservas' AND column_name = 'id'"
-            )
-        )
-        # La columna debe tener exactamente el tipo del id al que apunta (con o sin signo).
-        if not tipo_id or not re.fullmatch(r"[a-z]+(\(\d+\))?( unsigned)?", str(tipo_id).lower()):
-            raise RuntimeError(f"Tipo inesperado para reservas.id: {tipo_id!r}")
-        await sesion.execute(text(f"ALTER TABLE ventas ADD COLUMN reserva_id {tipo_id} NULL"))
-        await sesion.execute(text("ALTER TABLE ventas ADD CONSTRAINT uq_venta_reserva UNIQUE (reserva_id)"))
-        await sesion.execute(
-            text(
-                "ALTER TABLE ventas ADD CONSTRAINT fk_venta_reserva "
-                "FOREIGN KEY (reserva_id) REFERENCES reservas(id) ON DELETE SET NULL"
-            )
-        )
-        await _enlazar_ventas_antiguas(sesion)
-
+async def _sembrar_catalogos_base(sesion: AsyncSession) -> None:
+    """Tablas de referencia que la migración y el resto del arranque necesitan."""
+    for modelo, filas in ((TipoDocumento, TIPOS_DOCUMENTO_SEMILLA), (EstadoReserva, ESTADOS_RESERVA_SEMILLA),
+                          (EstadoPago, ESTADOS_PAGO_SEMILLA), (MetodoPago, METODOS_PAGO_SEMILLA)):
+        for codigo, nombre in filas:
+            if await sesion.scalar(select(modelo.id).where(modelo.codigo == codigo)) is None:
+                sesion.add(modelo(codigo=codigo, nombre=nombre))
+    for codigo, nombre in AEROLINEAS_SEMILLA:
+        if await sesion.scalar(select(Aerolinea.id).where(Aerolinea.nombre == nombre)) is None:
+            sesion.add(Aerolinea(codigo=codigo, nombre=nombre))
+    for nombre, capacidad in MODELOS_AVION_SEMILLA:
+        if await sesion.scalar(select(ModeloAvion.id).where(ModeloAvion.nombre == nombre)) is None:
+            sesion.add(ModeloAvion(nombre=nombre, capacidad=capacidad))
     await sesion.commit()
 
 
+async def _pais(sesion: AsyncSession, nombre: str) -> Pais:
+    pais = await sesion.scalar(select(Pais).where(Pais.nombre == nombre))
+    if pais is None:
+        pais = Pais(nombre=nombre)
+        sesion.add(pais)
+        await sesion.flush()
+    return pais
 
-async def _enlazar_ventas_antiguas(sesion: AsyncSession) -> None:
-    """Empareja las ventas anteriores a la columna con su reserva y pone al día sus estados.
 
-    Una venta y su reserva se crean en la misma petición, así que coinciden en
-    cliente, total y hora (con unos segundos de margen). Si el emparejamiento es
-    ambiguo se omite: es preferible una venta sin enlace a una enlazada mal.
+async def _ciudad(sesion: AsyncSession, pais: str, nombre: str) -> Ciudad:
+    """La ciudad de ese país; se busca sin distinguir tildes por si una migración la creó con otra grafía."""
+    pais_fila = await _pais(sesion, pais)
+    ciudades = (await sesion.scalars(select(Ciudad).where(Ciudad.pais_id == pais_fila.id))).unique().all()
+    for ciudad in ciudades:
+        if normalizar_texto(ciudad.nombre) == normalizar_texto(nombre):
+            return ciudad
+    ciudad = Ciudad(pais_id=pais_fila.id, nombre=nombre)
+    sesion.add(ciudad)
+    await sesion.flush()
+    return ciudad
+
+
+# --------------------------------------------------------------------------------------
+# Destinos, hoteles y excursiones de ejemplo
+# --------------------------------------------------------------------------------------
+
+
+async def _sembrar_destinos_y_alojamientos(sesion: AsyncSession) -> None:
+    for pais, ciudad in ORIGENES_SEMILLA:
+        await _ciudad(sesion, pais, ciudad)
+
+    for datos in DESTINOS_SEMILLA:
+        ciudad = await _ciudad(sesion, datos["pais"], datos["ciudad"])
+        if await sesion.scalar(select(Destino.id).where(Destino.ciudad_id == ciudad.id)) is None:
+            sesion.add(Destino(
+                ciudad_id=ciudad.id, descripcion=datos["descripcion"], precio_base=datos["precio"],
+                imagen_slug=datos["slug"], activo=True,
+            ))
+        for nombre, estrellas, precio_noche in datos["hoteles"]:
+            if await sesion.scalar(select(Hotel.id).where(Hotel.ciudad_id == ciudad.id, Hotel.nombre == nombre)) is None:
+                sesion.add(Hotel(
+                    nombre=nombre, ciudad_id=ciudad.id, estrellas=estrellas, precio_noche=precio_noche, activo=True,
+                    descripcion=f"Alojamiento seleccionado en {datos['ciudad']}, con desayuno, recepción 24 horas y ubicación estratégica para recorrer el destino.",
+                ))
+        for nombre, duracion, precio in datos["excursiones"]:
+            if await sesion.scalar(select(Excursion.id).where(Excursion.ciudad_id == ciudad.id, Excursion.nombre == nombre)) is None:
+                sesion.add(Excursion(
+                    nombre=nombre, ciudad_id=ciudad.id, duracion_horas=duracion, precio=precio, activo=True,
+                    descripcion=f"Experiencia guiada para conocer {datos['ciudad']} con acompañamiento local y tiempo para fotografías.",
+                ))
+        await sesion.flush()
+
+
+# --------------------------------------------------------------------------------------
+# Programación de vuelos
+# --------------------------------------------------------------------------------------
+
+
+def _numero_de_regreso(numero_ida: str) -> str:
+    return numero_ida.replace("AUR3", "AUR4", 1)
+
+
+async def _asegurar_programacion_de_vuelos(sesion: AsyncSession) -> None:
+    """Mantiene, para cada destino de ejemplo, salidas semanales de ida y su vuelo de regreso.
+
+    Solo añade fechas a continuación de la última que ya exista para esa ruta, así que no
+    resucita vuelos que un administrador haya borrado o desactivado.
     """
-    try:
-        async with sesion.begin_nested():
-            await sesion.execute(
-                text(
-                    "UPDATE ventas v JOIN reservas r ON r.usuario_id = v.cliente_id AND r.monto_total = v.total "
-                    "AND ABS(TIMESTAMPDIFF(SECOND, r.creado_en, v.creado_en)) <= 5 "
-                    "SET v.reserva_id = r.id WHERE v.reserva_id IS NULL"
-                )
+    hoy = ahora().date()
+    aerolinea = await sesion.scalar(select(Aerolinea).where(Aerolinea.nombre == "Aurora Airlines"))
+    modelos = {m.nombre: m for m in (await sesion.scalars(select(ModeloAvion))).all()}
+    origen = await _ciudad(sesion, *ORIGEN_PRINCIPAL)
+
+    for indice, datos in enumerate(DESTINOS_SEMILLA):
+        ciudad = await _ciudad(sesion, datos["pais"], datos["ciudad"])
+        numero_ida, numero_regreso = datos["vuelo"], _numero_de_regreso(datos["vuelo"])
+        noches = 6 + indice % 3
+        modelo = modelos["Airbus A320" if indice % 2 == 0 else "Boeing 787"]
+        capacidad = 180 if indice % 2 == 0 else 260
+        duracion = timedelta(hours=9 + indice % 4, minutes=45)
+        puerta, terminal = f"{chr(65 + indice % 4)}{10 + indice:02d}", str(1 + indice % 3)
+
+        salidas = [
+            momento.date() for momento in (await sesion.scalars(
+                select(Vuelo.fecha_salida).where(Vuelo.numero_vuelo == numero_ida, Vuelo.origen_id == origen.id, Vuelo.destino_id == ciudad.id)
+            )).all()
+        ]
+        fechas = set(salidas)
+        siguiente = max(max(salidas) + timedelta(days=DIAS_ENTRE_SALIDAS) if salidas else hoy, hoy + timedelta(days=DIAS_DE_ANTELACION))
+        while siguiente <= hoy + timedelta(days=HORIZONTE_DE_VENTA_DIAS):
+            salida = datetime.combine(siguiente, time(7 + indice % 5, 30))
+            sesion.add(Vuelo(
+                numero_vuelo=numero_ida, aerolinea_id=aerolinea.id, modelo_avion_id=modelo.id, origen_id=origen.id,
+                destino_id=ciudad.id, fecha_salida=salida, fecha_llegada=salida + duracion, capacidad_maxima=capacidad,
+                puerta=puerta, terminal=terminal, estado="programado", activo=True,
+            ))
+            fechas.add(siguiente)
+            siguiente += timedelta(days=DIAS_ENTRE_SALIDAS)
+
+        # Cada salida futura tiene su vuelo de regreso `noches` días después.
+        for fecha in sorted(f for f in fechas if f > hoy):
+            regreso = datetime.combine(fecha + timedelta(days=noches), time(11 + indice % 4, 0))
+            existe = await sesion.scalar(select(Vuelo.id).where(Vuelo.numero_vuelo == numero_regreso, Vuelo.fecha_salida == regreso))
+            if existe is None:
+                sesion.add(Vuelo(
+                    numero_vuelo=numero_regreso, aerolinea_id=aerolinea.id, modelo_avion_id=modelo.id, origen_id=ciudad.id,
+                    destino_id=origen.id, fecha_salida=regreso, fecha_llegada=regreso + duracion, capacidad_maxima=capacidad,
+                    puerta=puerta, terminal=terminal, estado="programado", activo=True,
+                ))
+        await sesion.flush()
+
+
+async def _asegurar_paquetes(sesion: AsyncSession) -> None:
+    """Un paquete de ejemplo por destino, siempre apuntando a la próxima salida disponible."""
+    momento = ahora()
+    origen = await _ciudad(sesion, *ORIGEN_PRINCIPAL)
+    for indice, datos in enumerate(DESTINOS_SEMILLA):
+        ciudad = await _ciudad(sesion, datos["pais"], datos["ciudad"])
+        destino = await sesion.scalar(select(Destino).where(Destino.ciudad_id == ciudad.id))
+        nombre = f"Aurora {datos['ciudad']}: experiencia completa"
+        noches = 6 + indice % 3
+        paquete = await sesion.scalar(select(Paquete).where(Paquete.nombre == nombre))
+
+        # Próxima salida futura de esta ruta con su vuelo de regreso.
+        ida = await sesion.scalar(
+            select(Vuelo)
+            .where(Vuelo.numero_vuelo == datos["vuelo"], Vuelo.origen_id == origen.id, Vuelo.destino_id == ciudad.id,
+                   Vuelo.activo.is_(True), Vuelo.estado == "programado", Vuelo.fecha_salida > momento + timedelta(days=3))
+            .order_by(Vuelo.fecha_salida.asc())
+            .limit(1)
+        )
+        if ida is None:
+            continue
+        regreso = await sesion.scalar(
+            select(Vuelo).where(
+                Vuelo.numero_vuelo == _numero_de_regreso(datos["vuelo"]),
+                Vuelo.fecha_salida >= datetime.combine(ida.fecha_salida.date() + timedelta(days=noches), time.min),
+                Vuelo.fecha_salida < datetime.combine(ida.fecha_salida.date() + timedelta(days=noches + 1), time.min),
             )
-    except Exception:  # noqa: BLE001 - el enlace de ventas antiguas es un extra, no debe impedir el arranque
-        logger.warning("No se pudieron enlazar las ventas antiguas con sus reservas.", exc_info=True)
+        )
+
+        if paquete is None:
+            hotel = await sesion.scalar(select(Hotel).where(Hotel.ciudad_id == ciudad.id, Hotel.nombre == datos["hoteles"][0][0]))
+            excursiones = [
+                await sesion.scalar(select(Excursion).where(Excursion.ciudad_id == ciudad.id, Excursion.nombre == excursion[0]))
+                for excursion in datos["excursiones"]
+            ]
+            sesion.add(Paquete(
+                nombre=nombre, destino_id=destino.id, vuelo_id=ida.id, vuelo_regreso_id=regreso.id if regreso else None,
+                hotel_id=hotel.id, noches=noches,
+                precio_base=(Decimal(str(destino.precio_base)) * Decimal("1.12")).quantize(Decimal("0.01")),
+                activo=True, excursiones=[e for e in excursiones if e is not None],
+            ))
+        elif paquete.activo and (paquete.vuelo_rel.fecha_salida <= momento or paquete.vuelo_rel.estado != "programado"):
+            # Su salida ya pasó: el paquete pasa a la siguiente. Las reservas ya hechas guardan sus propios vuelos.
+            paquete.vuelo_id = ida.id
+            paquete.vuelo_regreso_id = regreso.id if regreso else None
+        elif paquete.activo and paquete.vuelo_regreso_id is None and regreso is not None and paquete.vuelo_id == ida.id:
+            paquete.vuelo_regreso_id = regreso.id  # completa los paquetes anteriores al vuelo de regreso
+        await sesion.flush()
+
+
+# --------------------------------------------------------------------------------------
+# Roles y administrador
+# --------------------------------------------------------------------------------------
+
+
+async def _asegurar_roles_y_permisos(sesion: AsyncSession) -> None:
+    clausula = _clausula_no_duplicados(sesion)
+    roles: dict[str, Role] = {}
+    for nombre in PERMISOS_POR_ROL:
+        rol = await sesion.scalar(select(Role).where(Role.nombre == nombre))
+        if rol is None:
+            rol = Role(nombre=nombre)
+            sesion.add(rol)
+            await sesion.flush()
+        roles[nombre] = rol
+    permisos: dict[str, Permiso] = {}
+    for lista in PERMISOS_POR_ROL.values():
+        for nombre in lista:
+            permiso = await sesion.scalar(select(Permiso).where(Permiso.nombre == nombre))
+            if permiso is None:
+                permiso = Permiso(nombre=nombre)
+                sesion.add(permiso)
+                await sesion.flush()
+            permisos[nombre] = permiso
+    for rol_nombre, lista in PERMISOS_POR_ROL.items():
+        for permiso_nombre in lista:
+            await sesion.execute(
+                text(f"{clausula} INTO rol_permisos (rol_id, permiso_id) VALUES (:rol_id, :permiso_id)"),
+                {"rol_id": roles[rol_nombre].id, "permiso_id": permisos[permiso_nombre].id},
+            )
+
+
+async def _asegurar_administrador(sesion: AsyncSession) -> None:
+    """Crea el administrador inicial y vigila que no siga con una clave conocida.
+
+    La clave de `ADMIN_PASSWORD` solo se aplica al crear la cuenta (o si se pide restablecerla con
+    `ADMIN_RESTABLECER_CONTRASENA=true`). Antes se reaplicaba en cada arranque: cambiar la contraseña
+    desde la app no servía de nada tras el siguiente despliegue. Y si la clave es la de ejemplo, la
+    cuenta queda obligada a cambiarla en su primer acceso.
+    """
+    rol = await sesion.scalar(select(Role).where(Role.nombre == "administrador"))
+    tipo = await sesion.scalar(select(TipoDocumento).where(TipoDocumento.codigo == "CC"))
+    correo = configuracion.admin_email.lower()
+    admin = await sesion.scalar(select(User).where(User.correo == correo))
+    clave_conocida = _es_clave_conocida(configuracion.admin_password)
+
+    if admin is None:
+        sesion.add(User(
+            nombre="Administrador", apellido="Aurora", tipo_documento_id=tipo.id, numero_documento="1000000000",
+            direccion="Oficina principal Aurora Viajes", telefono="3000000000", correo=correo,
+            contrasena_hash=hashear_contrasena(configuracion.admin_password), rol_id=rol.id, activo=True,
+            debe_cambiar_contrasena=clave_conocida,
+        ))
+        if clave_conocida:
+            logger.warning("El administrador se creó con una clave de ejemplo: deberá cambiarla al entrar. Define ADMIN_PASSWORD.")
         return
-    await sesion.execute(
-        text(
-            "UPDATE ventas v JOIN reservas r ON r.id = v.reserva_id "
-            "JOIN estados_reserva er ON er.id = r.estado_id JOIN estados_pago ep ON ep.id = r.estado_pago_id "
-            "SET v.estado = CASE WHEN er.codigo = 'cancelada' THEN 'cancelada' "
-            "WHEN ep.codigo = 'pagado' THEN 'completada' ELSE 'pendiente' END"
-        )
-    )
-    await sesion.execute(
-        text(
-            "UPDATE facturas f JOIN ventas v ON v.id = f.venta_id "
-            "SET f.estado = CASE WHEN v.estado = 'cancelada' THEN 'anulada' ELSE 'emitida' END "
-            "WHERE v.reserva_id IS NOT NULL"
-        )
-    )
+
+    admin.rol_id = rol.id
+    admin.activo = True
+    if configuracion.admin_restablecer_contrasena:
+        admin.contrasena_hash = hashear_contrasena(configuracion.admin_password)
+        admin.sesion_version += 1
+        admin.debe_cambiar_contrasena = clave_conocida
+        logger.warning("La contraseña del administrador se restableció desde ADMIN_PASSWORD.")
+    elif not admin.debe_cambiar_contrasena:
+        try:
+            es_conocida = verificar_contrasena(CLAVE_DE_EJEMPLO, admin.contrasena_hash)
+        except Exception:  # noqa: BLE001 - un hash ilegible no debe impedir el arranque
+            es_conocida = False
+        if es_conocida:
+            admin.debe_cambiar_contrasena = True
+            logger.warning("El administrador sigue con la clave de ejemplo: se le obligará a cambiarla en su próximo acceso.")
+

@@ -54,6 +54,8 @@ function Footer() {
                 ["/recomendaciones", "Recomendaciones"],
                 ["/quienes-somos", "Quiénes somos"],
                 ["/contacto", "Contacto"],
+                ["/registro", "Crear cuenta"],
+                ["/acceso-personal", "Acceso del personal"],
               ].map(([a, texto]) => (
                 <Link key={a} to={a} className="text-primario no-underline transition hover:translate-x-1 hover:text-acento">
                   {texto}

@@ -3,6 +3,9 @@ import time
 import uuid
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
+
+from app.core.configuracion import configuracion
 
 
 logger = logging.getLogger("aurora-viajes.peticiones")
@@ -43,3 +46,18 @@ async def cabeceras_de_seguridad(peticion: Request, call_next):
     if peticion.url.scheme == "https" or peticion.headers.get("x-forwarded-proto") == "https":
         respuesta.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return respuesta
+
+
+async def limitar_tamano_del_cuerpo(peticion: Request, call_next):
+    """Rechaza de entrada las peticiones con un cuerpo declarado mayor que el máximo.
+
+    La API solo recibe JSON pequeño; un cuerpo de decenas de megabytes solo sirve para
+    gastar memoria y tiempo de análisis.
+    """
+    largo = peticion.headers.get("content-length", "")
+    if largo.isdigit() and int(largo) > configuracion.tamano_maximo_cuerpo:
+        return JSONResponse(
+            status_code=413,
+            content={"codigo": "cuerpo_demasiado_grande", "mensaje": "La petición es demasiado grande.", "ruta": peticion.url.path, "detalles": None},
+        )
+    return await call_next(peticion)

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { esPersonal } from "../utils/rutas";
 
 function Sidebar() {
   const { sesion, cerrarSesion } = useAuth();
@@ -9,6 +10,7 @@ function Sidebar() {
   const location = useLocation();
 
   const rol = sesion?.usuario?.rol;
+  const esPersonalUsuario = esPersonal(sesion?.usuario);
   const vistaActiva = new URLSearchParams(location.search).get("vista") || "reservas";
 
   const enlaceClase = (activo) =>
@@ -69,7 +71,7 @@ function Sidebar() {
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-xl bg-acento font-display text-xl font-bold text-white">A</span>
               <div>
-                <h1 className="font-display text-xl font-bold tracking-tight text-white">Aurora</h1>
+                <p className="font-display text-xl font-bold tracking-tight text-white">Aurora</p>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-acento-suave">Viajes</p>
               </div>
             </div>
@@ -81,23 +83,26 @@ function Sidebar() {
 
           <nav className="flex-1 space-y-1 px-4 py-6">
             <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6f8090]">Gestión</p>
-            <NavLink
-              to="/panel?vista=reservas"
-              className={() => enlaceClase(vistaActiva === "reservas")}
-              onClick={() => setSidebarAbierto(false)}
-            >
-              <span className="flex items-center gap-3"><span className="text-base">▤</span> Solicitudes</span>
-              <span className="text-xs opacity-60">→</span>
-            </NavLink>
-
-            <NavLink
-              to="/panel?vista=vuelos"
-              className={() => enlaceClase(vistaActiva === "vuelos")}
-              onClick={() => setSidebarAbierto(false)}
-            >
-              <span className="flex items-center gap-3"><span className="text-base">✈</span> Vuelos</span>
-              <span className="text-xs opacity-60">→</span>
-            </NavLink>
+            {[
+              ["reservas", esPersonalUsuario ? "Reservas" : "Mis reservas", "▤", true],
+              ["nueva", "Nueva reserva", "＋", esPersonalUsuario],
+              ["vuelos", "Vuelos", "✈", esPersonalUsuario],
+              ["catalogo", "Catálogo", "✦", rol === "administrador"],
+              ["usuarios", "Usuarios", "♙", rol === "administrador"],
+              ["mensajes", "Mensajes", "✉", rol === "administrador"],
+            ]
+              .filter(([, , , visible]) => visible)
+              .map(([vista, etiqueta, icono]) => (
+                <NavLink
+                  key={vista}
+                  to={`/panel?vista=${vista}`}
+                  className={() => enlaceClase(location.pathname === "/panel" && vistaActiva === vista)}
+                  onClick={() => setSidebarAbierto(false)}
+                >
+                  <span className="flex items-center gap-3"><span className="text-base">{icono}</span> {etiqueta}</span>
+                  <span className="text-xs opacity-60">→</span>
+                </NavLink>
+              ))}
 
             <p className="mb-3 mt-8 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6f8090]">Comercial</p>
             {[
@@ -118,43 +123,6 @@ function Sidebar() {
               </NavLink>
             ))}
 
-            {rol === "administrador" && (
-              <>
-                <NavLink
-                  to="/panel?vista=paquetes"
-                  className={() => enlaceClase(vistaActiva === "paquetes")}
-                  onClick={() => setSidebarAbierto(false)}
-                >
-                  <span className="flex items-center gap-3"><span className="text-base">✦</span> Reservas publicadas</span>
-                  <span className="text-xs opacity-60">→</span>
-                </NavLink>
-                <NavLink
-                  to="/panel?vista=usuarios"
-                  className={() => enlaceClase(vistaActiva === "usuarios")}
-                  onClick={() => setSidebarAbierto(false)}
-                >
-                  <span className="flex items-center gap-3"><span className="text-base">♙</span> Usuarios</span>
-                  <span className="text-xs opacity-60">→</span>
-                </NavLink>
-                <NavLink
-                  to="/panel?vista=mensajes"
-                  className={() => enlaceClase(vistaActiva === "mensajes")}
-                  onClick={() => setSidebarAbierto(false)}
-                >
-                  <span className="flex items-center gap-3"><span className="text-base">✉</span> Mensajes</span>
-                  <span className="text-xs opacity-60">→</span>
-                </NavLink>
-                <NavLink
-                  to="/panel?vista=crear"
-                  className={() => enlaceClase(vistaActiva === "crear")}
-                  onClick={() => setSidebarAbierto(false)}
-                >
-                  <span className="flex items-center gap-3"><span className="text-base">＋</span> Agregar usuario</span>
-                  <span className="text-xs opacity-60">→</span>
-                </NavLink>
-              </>
-            )}
-
             <p className="mb-3 mt-8 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6f8090]">Acceso rápido</p>
             <NavLink
               to="/"
@@ -162,6 +130,16 @@ function Sidebar() {
               onClick={() => setSidebarAbierto(false)}
             >
               <span className="flex items-center gap-3"><span className="text-base">⌂</span> Ir al inicio</span>
+              <span className="text-xs opacity-60">→</span>
+            </NavLink>
+            {!esPersonalUsuario && (
+              <NavLink to="/reservas" className={() => enlaceClase(false)} onClick={() => setSidebarAbierto(false)}>
+                <span className="flex items-center gap-3"><span className="text-base">✈</span> Reservar un viaje</span>
+                <span className="text-xs opacity-60">→</span>
+              </NavLink>
+            )}
+            <NavLink to="/cambiar-contrasena" className={() => enlaceClase(location.pathname === "/cambiar-contrasena")} onClick={() => setSidebarAbierto(false)}>
+              <span className="flex items-center gap-3"><span className="text-base">⚿</span> Cambiar contraseña</span>
               <span className="text-xs opacity-60">→</span>
             </NavLink>
           </nav>

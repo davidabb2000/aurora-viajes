@@ -16,21 +16,27 @@ from collections import defaultdict, deque
 
 from fastapi import Request
 
+from app.core.configuracion import configuracion
 from app.errores import DemasiadasPeticiones
 
 
 def cliente_de(peticion: Request) -> str:
     """Identifica al cliente detras del proxy de la plataforma.
 
-    Railway y Cloudflare anteponen la IP real en X-Forwarded-For. Se toma la
-    primera entrada, que es la del cliente; las siguientes son proxies
-    intermedios. Si la cabecera no viene, se usa la conexion directa.
+    Cada proxy añade a la DERECHA de X-Forwarded-For la IP de quien le hablo. Lo
+    que el cliente escriba en la cabecera queda a la izquierda, asi que la primera
+    entrada se puede falsificar (bastaba una IP distinta en cada peticion para
+    saltarse el limite de intentos de login). Se cuenta desde la derecha,
+    saltando los proxies de confianza (`PROXIES_DE_CONFIANZA`, Railway = 1).
+    Sin proxies de confianza (0) la cabecera la escribe cualquiera y se ignora; y si
+    no viene, se usa la conexion directa.
     """
-    reenviada = peticion.headers.get("x-forwarded-for", "")
+    saltos = configuracion.proxies_de_confianza
+    reenviada = peticion.headers.get("x-forwarded-for", "") if saltos > 0 else ""
     if reenviada:
-        primera = reenviada.split(",")[0].strip()
-        if primera:
-            return primera
+        entradas = [entrada.strip() for entrada in reenviada.split(",") if entrada.strip()]
+        if entradas:
+            return entradas[-saltos] if len(entradas) >= saltos else entradas[0]
     return peticion.client.host if peticion.client else "desconocido"
 
 

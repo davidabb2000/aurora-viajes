@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { IconoPin } from "./Decoraciones";
+import { esPersonal } from "../utils/rutas";
 
 const ENLACES = [
   { a: "/recomendaciones", texto: "Recomendaciones" },
@@ -17,7 +18,7 @@ const ENLACES_MOVIL = [
 ];
 
 function Header() {
-  const { sesion, cerrarSesion } = useAuth();
+  const { sesion, cerrarSesion, cerrarTodasLasSesiones } = useAuth();
   const { pathname } = useLocation();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [movilAbierto, setMovilAbierto] = useState(false);
@@ -145,13 +146,24 @@ function Header() {
                 </button>
 
                 {menuAbierto && (
-                  <div role="menu" aria-label="Menú de usuario" className="vidrio-solido absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-2xl">
+                  <div role="menu" aria-label="Menú de usuario" className="vidrio-solido absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl">
+                    <div className="border-b border-primario/10 px-4 py-3">
+                      <p className="truncate text-sm font-semibold text-primario">{sesion.usuario.nombre} {sesion.usuario.apellido}</p>
+                      <p className="truncate text-xs text-texto-suave">{sesion.usuario.correo}</p>
+                    </div>
                     <NavLink
-                      to="/panel"
+                      to={esPersonal(sesion.usuario) ? "/panel" : "/reservas"}
                       role="menuitem"
                       className="block px-4 py-3 text-sm font-medium text-primario no-underline transition hover:bg-arena/60"
                     >
-                      Mi panel
+                      {esPersonal(sesion.usuario) ? "Mi panel" : "Mis reservas"}
+                    </NavLink>
+                    <NavLink
+                      to="/cambiar-contrasena"
+                      role="menuitem"
+                      className="block px-4 py-3 text-sm font-medium text-primario no-underline transition hover:bg-arena/60"
+                    >
+                      Cambiar contraseña
                     </NavLink>
                     <button
                       type="button"
@@ -164,18 +176,34 @@ function Header() {
                     >
                       Cerrar sesión
                     </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuAbierto(false);
+                        cerrarTodasLasSesiones();
+                      }}
+                      className="block w-full border-t border-primario/10 px-4 py-2.5 text-left text-xs text-texto-suave transition hover:bg-arena/60"
+                    >
+                      Cerrar sesión en todos los dispositivos
+                    </button>
                   </div>
                 )}
               </div>
             ) : (
-              <Link
-                to="/login"
-                className={`rounded-full px-4 py-2 text-sm font-medium no-underline transition-colors ${
-                  oscura ? "text-primario hover:bg-primario/8" : "text-white hover:bg-white/15"
-                }`}
-              >
-                Iniciar sesión
-              </Link>
+              <div className="flex items-center gap-1">
+                <Link
+                  to="/login"
+                  className={`rounded-full px-4 py-2 text-sm font-medium no-underline transition-colors ${
+                    oscura ? "text-primario hover:bg-primario/8" : "text-white hover:bg-white/15"
+                  }`}
+                >
+                  Iniciar sesión
+                </Link>
+                <Link to="/registro" className={`${oscura ? "boton-tinta" : "boton-claro"} px-4 py-2 text-sm font-semibold no-underline`}>
+                  Crear cuenta
+                </Link>
+              </div>
             )}
           </div>
         </div>
@@ -212,8 +240,12 @@ function Header() {
 
           {sesion ? (
             <div className="flex items-center justify-between gap-3">
-              <Link to="/panel" onClick={() => setMovilAbierto(false)} className="boton-tinta px-6 py-3 text-sm font-semibold no-underline">
-                Mi panel
+              <Link
+                to={esPersonal(sesion.usuario) ? "/panel" : "/reservas"}
+                onClick={() => setMovilAbierto(false)}
+                className="boton-tinta px-6 py-3 text-sm font-semibold no-underline"
+              >
+                {esPersonal(sesion.usuario) ? "Mi panel" : "Mis reservas"}
               </Link>
               <button
                 type="button"
@@ -227,9 +259,14 @@ function Header() {
               </button>
             </div>
           ) : (
-            <Link to="/login" onClick={() => setMovilAbierto(false)} className="boton-tinta px-6 py-3 text-center text-sm font-semibold no-underline">
-              Iniciar sesión
-            </Link>
+            <div className="flex gap-3">
+              <Link to="/login" onClick={() => setMovilAbierto(false)} className="flex-1 rounded-full border border-primario/25 px-6 py-3 text-center text-sm font-semibold text-primario no-underline">
+                Iniciar sesión
+              </Link>
+              <Link to="/registro" onClick={() => setMovilAbierto(false)} className="boton-tinta flex-1 px-6 py-3 text-center text-sm font-semibold no-underline">
+                Crear cuenta
+              </Link>
+            </div>
           )}
         </div>
       )}

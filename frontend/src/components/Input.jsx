@@ -1,6 +1,7 @@
 /**
- * Input reutilizable con label, mensaje de error y estilos Tailwind.
- * Se apoya en el estado y las validaciones que maneja el formulario padre.
+ * Input reutilizable con label, ayuda, mensaje de error y estilos Tailwind.
+ * Se apoya en el estado y las validaciones que maneja el formulario padre; cualquier otro
+ * atributo del input (inputMode, disabled, min, autoFocus...) se pasa tal cual.
  */
 function Input({
   label,
@@ -10,6 +11,7 @@ function Input({
   onChange,
   onBlur,
   error,
+  ayuda,
   placeholder,
   maxLength,
   required = false,
@@ -17,6 +19,7 @@ function Input({
   botonContrasena = false,
   mostrarContrasena = false,
   cambiarVisibilidad,
+  ...resto
 }) {
   return (
     <label className="flex flex-col gap-1.5 text-sm font-medium text-texto">
@@ -35,12 +38,13 @@ function Input({
           maxLength={maxLength}
           autoComplete={autoComplete}
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? `${name}-error` : undefined}
-          className={`w-full rounded-xl border bg-white/70 px-3.5 py-2.5 text-[0.95rem] text-texto backdrop-blur-sm placeholder:text-texto-suave/60 outline-none transition focus:bg-white/90 focus:ring-3 ${
+          aria-describedby={error ? `${name}-error` : ayuda ? `${name}-ayuda` : undefined}
+          className={`w-full rounded-xl border bg-white/70 px-3.5 py-2.5 text-[0.95rem] text-texto backdrop-blur-sm placeholder:text-texto-suave/60 outline-none transition focus:bg-white/90 focus:ring-3 disabled:opacity-60 ${
             error
               ? "border-red-400 focus:border-red-400 focus:ring-red-100"
               : "border-primario/12 shadow-sm shadow-primario/5 focus:border-primario-suave focus:ring-primario-suave/20"
           } ${botonContrasena ? "pr-20" : ""}`}
+          {...resto}
         />
         {botonContrasena && (
           <button
@@ -53,10 +57,16 @@ function Input({
           </button>
         )}
       </span>
-      {error && (
+      {error ? (
         <span id={`${name}-error`} className="text-xs font-medium text-red-600">
           {error}
         </span>
+      ) : (
+        ayuda && (
+          <span id={`${name}-ayuda`} className="text-xs font-normal text-texto-suave">
+            {ayuda}
+          </span>
+        )
       )}
     </label>
   );

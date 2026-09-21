@@ -1,13 +1,28 @@
-"""Búsquedas de filas de catálogo y utilidades de texto compartidas por los routers."""
+"""Búsquedas de filas de catálogo y utilidades compartidas por los routers y los servicios."""
 import secrets
 import unicodedata
+from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.errores import ErrorDeDominio
 from app.models.dominio import Destino, EstadoPago, EstadoReserva, MetodoPago, TipoDocumento, Vuelo
+
+
+def ahora() -> datetime:
+    """Hora actual como fecha «ingenua» en UTC, comparable con las que devuelve la base de datos.
+
+    Las horas de los vuelos se guardan como hora local del aeropuerto, sin zona; compararlas con
+    la hora UTC adelanta el cierre de ventas unas horas, que es el lado seguro para no vender un
+    vuelo que ya salió.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def sin_zona(momento: datetime) -> datetime:
+    """Quita la zona horaria de una fecha para poder compararla con las de la base de datos."""
+    return momento.replace(tzinfo=None) if momento.tzinfo else momento
 
 
 async def resolver_tipo_documento_id(sesion: AsyncSession, codigo: str) -> int:
@@ -38,25 +53,23 @@ async def resolver_metodo_pago_id(sesion: AsyncSession, codigo: str) -> int:
     return metodo.id
 
 
-async def resolver_destino(sesion: AsyncSession, destino: str | None = None, destino_id: int | None = None) -> Destino:
-    if destino_id is not None:
-        destino_obj = await sesion.get(Destino, destino_id, options=[selectinload(Destino.pais)])
-        if destino_obj is not None:
-            return destino_obj
-    if destino:
-        destino_obj = await sesion.scalar(
-            select(Destino)
-            .where(func.lower(Destino.nombre) == destino.strip().lower())
-            .options(selectinload(Destino.pais))
-        )
-        if destino_obj is not None:
-            return destino_obj
-    raise ErrorDeDominio("Selecciona un destino válido.")
+async def resolver_destino(sesion: AsyncSession, destino_id: int) -> Destino:
+    """Un destino activo por su id. La ciudad y el país se cargan junto con él."""
+    destino = await sesion.get(Destino, destino_id)
+    if destino is None or not destino.activo:
+        raise ErrorDeDominio("Selecciona un destino válido.")
+    return destino
 
 
 def normalizar_texto(value: str) -> str:
+    """Minúsculas, sin tildes y con espacios simples: para comparar nombres escritos de formas distintas."""
     texto = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
     return " ".join(texto.lower().split())
+
+
+def escapar_like(texto: str) -> str:
+    """Escapa los comodines de LIKE para que una búsqueda literal no se comporte como patrón."""
+    return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def puerta_terminal_por_ruta(origen: str, destino: str) -> tuple[str, str]:
@@ -72,16 +85,3 @@ async def generar_numero_vuelo(sesion: AsyncSession) -> str:
         numero = f"AV-{secrets.randbelow(1_000_000):06d}"
         if await sesion.scalar(select(Vuelo.id).where(Vuelo.numero_vuelo == numero)) is None:
             return numero
-
-
-def ciudad_del_destino(destino: Destino) -> str:
-    """Los destinos se nombran "Ciudad, Pais"; devuelve solo la ciudad."""
-    return normalizar_texto(destino.nombre.split(",")[0])
-
-
-def esta_en_el_destino(ciudad: str, pais: str, destino: Destino) -> bool:
-    """Comprueba que un hotel o excursion pertenezca al destino del viaje."""
-    pais_destino = normalizar_texto(destino.pais.nombre) if destino.pais else ""
-    if pais_destino and normalizar_texto(pais) != pais_destino:
-        return False
-    return normalizar_texto(ciudad) == ciudad_del_destino(destino)

@@ -8,7 +8,6 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.core.configuracion import configuracion
 from app.dependencias import SesionDep, UsuarioActual
@@ -73,23 +72,17 @@ def _puntaje_destino(intereses: str, destino: dict) -> int:
 
 
 async def _catalogo_destinos_recomendacion(sesion: SesionDep) -> list[dict]:
-    destinos = await sesion.scalars(
-        select(Destino)
-        .options(selectinload(Destino.pais))
-        .where(Destino.activo.is_(True))
-        .where(Destino.precio_base > 0)
-        .order_by(Destino.nombre.asc())
-    )
+    destinos = await sesion.scalars(select(Destino).where(Destino.activo.is_(True)).where(Destino.precio_base > 0))
     return [
         {
             "destino_id": destino.id,
             "nombre": destino.nombre,
-            "pais": destino.pais.nombre if destino.pais else "",
+            "pais": destino.pais.nombre,
             "descripcion": destino.descripcion,
             "precio_estimado": float(destino.precio_base or 0),
             "imagen_slug": destino.imagen_slug,
         }
-        for destino in destinos
+        for destino in sorted(destinos.unique(), key=lambda d: d.nombre)
     ]
 
 

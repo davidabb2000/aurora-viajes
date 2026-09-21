@@ -15,8 +15,9 @@ from app.core.configuracion import configuracion
 from app.core.limitador import limitador, limitar
 from app.dependencias import EmpleadoOAdmin, SesionDep, UsuarioActual
 from app.errores import ConflictoDeNegocio, PermisoDenegado, RecursoNoEncontrado
-from app.models.dominio import Conversacion, Destino, DetalleFactura, DetalleVenta, EstadoReserva, Factura, Mensaje, PQR, Producto, Reserva, Servicio, User, Venta
+from app.models.dominio import Conversacion, DetalleFactura, DetalleVenta, EstadoReserva, Factura, Mensaje, PQR, Producto, Reserva, Servicio, User, Venta
 from app.schemas.comercial import ChatEntrada, PQRActualizacion, PQREntrada, VentaEntrada
+from app.services.catalogos import escapar_like
 from app.services.documentos import construir_pdf, construir_xlsx
 from app.services.recomendaciones import ProveedorNoDisponible, ServicioDeRecomendaciones
 
@@ -134,7 +135,8 @@ async def listar_facturas(sesion: SesionDep, usuario: UsuarioActual, numero: str
     elif cliente_id:
         consulta = consulta.where(Venta.cliente_id == cliente_id)
     if numero:
-        consulta = consulta.where(Factura.numero.ilike(f"%{numero}%"))
+        # Los comodines de LIKE se escapan: el texto buscado es literal, no un patrón.
+        consulta = consulta.where(Factura.numero.ilike(f"%{escapar_like(numero[:40])}%", escape="\\"))
     if desde:
         consulta = consulta.where(Factura.creado_en >= datetime.combine(desde, time.min, tzinfo=timezone.utc))
     if hasta:
@@ -368,8 +370,11 @@ async def estadisticas(sesion: SesionDep, usuario: EmpleadoOAdmin, desde: date |
     lo que el panel no podia decir de donde sale el dinero, que destinos tiran
     del negocio ni si el periodo va mejor o peor que el anterior.
     """
-    dia_inicial = desde or date.today() - timedelta(days=29)
-    dia_final = hasta or date.today()
+    # «Hoy» es el día en UTC, como las fechas que se guardan: con la del sistema, un servidor en otra zona horaria
+    # dejaba fuera las ventas de las últimas horas del día.
+    hoy = datetime.now(timezone.utc).date()
+    dia_inicial = desde or hoy - timedelta(days=29)
+    dia_final = hasta or hoy
     inicio = datetime.combine(dia_inicial, time.min, tzinfo=timezone.utc)
     fin = datetime.combine(dia_final + timedelta(days=1), time.min, tzinfo=timezone.utc)
 
@@ -426,7 +431,6 @@ async def estadisticas(sesion: SesionDep, usuario: EmpleadoOAdmin, desde: date |
     # Los destinos salen de las reservas, que son las que conocen el viaje.
     reservas = (await sesion.scalars(
         select(Reserva)
-        .options(selectinload(Reserva.destino_rel).selectinload(Destino.pais))
         .where(
             Reserva.creado_en >= inicio,
             Reserva.creado_en < fin,

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import logging
 import time
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import httpx
@@ -152,6 +153,7 @@ async def registrar_pago(sesion: AsyncSession, reserva: Reserva, session_id: str
     reserva.estado_pago_rel = await sesion.scalar(select(EstadoPago).where(EstadoPago.codigo == "pagado"))
     reserva.metodo_pago_rel = await sesion.scalar(select(MetodoPago).where(MetodoPago.codigo == "stripe"))
     reserva.stripe_session_id = session_id or reserva.stripe_session_id
+    reserva.pagado_en = datetime.now(timezone.utc)
     if reserva.estado_rel.codigo == "pendiente":
         reserva.estado_rel = await sesion.scalar(select(EstadoReserva).where(EstadoReserva.codigo == "confirmada"))
     elif reserva.estado_rel.codigo == "cancelada":

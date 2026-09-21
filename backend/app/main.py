@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from app.core.base_datos import motor
 from app.core.configuracion import configuracion
@@ -23,8 +24,8 @@ from app.errores import (
     RecursoNoEncontrado,
     ServicioNoDisponible,
 )
-from app.middlewares import cabeceras_de_seguridad, registrar_peticion
-from app.routers import auth, catalogo, comercial, contacto, pagos, recomendaciones, reservas, usuarios, viajes
+from app.middlewares import cabeceras_de_seguridad, limitar_tamano_del_cuerpo, registrar_peticion
+from app.routers import auth, catalogo, clientes, comercial, contacto, pagos, recomendaciones, reservas, usuarios, viajes
 from app.services.siembra import asegurar_base_inicial
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
@@ -33,6 +34,8 @@ logger = logging.getLogger("aurora-viajes")
 
 @asynccontextmanager
 async def ciclo_de_vida(app: FastAPI):
+    if len(configuracion.secret_key) < 32:
+        logger.warning("SECRET_KEY tiene menos de 32 caracteres: genera una más larga (python -c \"import secrets; print(secrets.token_urlsafe(48))\").")
     await asegurar_base_inicial()
     yield
     await motor.dispose()
@@ -42,10 +45,15 @@ app = FastAPI(
     title=configuracion.nombre_app,
     description="API de gestión de reservas y viajes.",
     version="1.0.0",
+    # La documentación interactiva y el esquema OpenAPI describen toda la API: solo en desarrollo.
     docs_url="/docs" if configuracion.depuracion else None,
     redoc_url="/redoc" if configuracion.depuracion else None,
+    openapi_url="/openapi.json" if configuracion.depuracion else None,
     lifespan=ciclo_de_vida,
 )
+# El último que se añade es el más externo: primero se registra, luego se ponen las cabeceras y por
+# último se rechazan los cuerpos enormes (así también la respuesta 413 lleva cabeceras de seguridad).
+app.middleware("http")(limitar_tamano_del_cuerpo)
 app.middleware("http")(cabeceras_de_seguridad)
 app.middleware("http")(registrar_peticion)
 app.add_middleware(
@@ -57,7 +65,7 @@ app.add_middleware(
     expose_headers=["X-Peticion-Id", "X-Tiempo-Respuesta-ms"],
 )
 
-for modulo in (recomendaciones, comercial, auth, usuarios, catalogo, viajes, reservas, pagos, contacto):
+for modulo in (recomendaciones, comercial, auth, usuarios, clientes, catalogo, viajes, reservas, pagos, contacto):
     app.include_router(modulo.router)
 
 
@@ -106,10 +114,55 @@ async def manejar_error_dominio(peticion: Request, exc: ErrorDeDominio):
     return _respuesta_error(peticion, status.HTTP_400_BAD_REQUEST, exc.codigo, exc.mensaje)
 
 
+def _problema_de(error: dict) -> str:
+    """Redacta en español el problema de un campo; las reglas propias ya vienen redactadas."""
+    tipo, contexto = str(error.get("type", "")), error.get("ctx") or {}
+    if tipo == "value_error":
+        return str(error.get("msg", "")).removeprefix("Value error, ")
+    if tipo == "missing":
+        return "Este campo es obligatorio."
+    if tipo == "string_too_short":
+        return f"Debe tener al menos {contexto.get('min_length')} caracteres."
+    if tipo == "string_too_long":
+        return f"No puede superar {contexto.get('max_length')} caracteres."
+    if tipo in {"greater_than_equal", "greater_than"}:
+        return f"Debe ser al menos {contexto.get('ge', contexto.get('gt'))}."
+    if tipo in {"less_than_equal", "less_than"}:
+        return f"No puede ser mayor que {contexto.get('le', contexto.get('lt'))}."
+    if tipo == "too_long":
+        return f"No puede tener más de {contexto.get('max_length')} elementos."
+    if tipo in {"literal_error", "enum"}:
+        return "Valor no permitido."
+    if tipo == "string_pattern_mismatch":
+        return "El formato no es válido."
+    if tipo.endswith("_parsing") or tipo.endswith("_type") or tipo.startswith("json"):
+        return "El valor no tiene el formato esperado."
+    return "Valor no válido."
+
+
 @app.exception_handler(RequestValidationError)
 async def manejar_validacion(peticion: Request, exc: RequestValidationError):
-    detalles = [{"campo": ".".join(str(p) for p in error["loc"][1:]), "problema": error["msg"]} for error in exc.errors()]
-    return _respuesta_error(peticion, status.HTTP_422_UNPROCESSABLE_ENTITY, "datos_invalidos", "Los datos enviados no cumplen el formato esperado.", detalles)
+    errores = exc.errors()
+    detalles = [{"campo": ".".join(str(p) for p in error["loc"][1:]), "problema": _problema_de(error)} for error in errores]
+    # Una regla propia (contraseña débil, correo inválido...) ya viene redactada para la persona: se muestra tal cual.
+    propios = [detalle for error, detalle in zip(errores, detalles) if error.get("type") == "value_error"]
+    if propios:
+        mensaje = propios[0]["problema"]
+    elif len(detalles) == 1 and detalles[0]["campo"]:
+        mensaje = f"{detalles[0]['campo']}: {detalles[0]['problema']}"
+    else:
+        mensaje = "Los datos enviados no cumplen el formato esperado."
+    return _respuesta_error(peticion, status.HTTP_422_UNPROCESSABLE_ENTITY, "datos_invalidos", mensaje, detalles)
+
+
+@app.exception_handler(IntegrityError)
+async def manejar_integridad(peticion: Request, exc: IntegrityError):
+    # Una restricción de la base (duplicado, dato en uso) se explica como conflicto, no como error del servidor.
+    logger.warning("Violación de integridad en %s: %s", peticion.url.path, exc.orig)
+    return _respuesta_error(
+        peticion, status.HTTP_409_CONFLICT, "conflicto_de_datos",
+        "La operación choca con datos existentes: un duplicado o algo que ya está en uso.",
+    )
 
 
 @app.exception_handler(Exception)
@@ -120,7 +173,10 @@ async def manejar_error_inesperado(peticion: Request, exc: Exception):
 
 @app.get("/")
 def raiz():
-    return {"servicio": configuracion.nombre_app, "version": app.version, "entorno": configuracion.entorno, "documentacion": "/docs"}
+    datos = {"servicio": configuracion.nombre_app, "version": app.version}
+    if configuracion.depuracion:
+        datos.update(entorno=configuracion.entorno, documentacion="/docs")
+    return datos
 
 
 @app.get("/salud")

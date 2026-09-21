@@ -18,11 +18,20 @@ Crea un servicio MySQL gratuito y copia su URI (`mysql://usuario:clave@host:puer
 
 `DATABASE_URL` puede llevar la URI tal cual: el backend cambia el esquema a `mysql+aiomysql://`, fuerza `charset=utf8mb4` y activa TLS al ver `ssl-mode`. Sin certificado de CA propio la conexión va cifrada pero **no se verifica el certificado**; para verificarlo, descarga el CA de Aiven y apunta `MYSQL_SSL_CA` a él.
 
-**Migraciones.** Las tablas ya existentes no las modifica `create_all`, así que el backend aplica al arrancar los cambios de esquema que faltan, de forma idempotente. La versión que añade `ventas.reserva_id` crea esa columna y empareja las ventas anteriores con su reserva por cliente, total y hora, poniendo al día sus estados. Antes del primer despliegue con datos que te importen, haz una copia:
+**Migraciones.** Las tablas ya existentes no las modifica `create_all`, así que el backend, al arrancar, detecta el esquema anterior y lo migra al normalizado (3FN) con `services/migraciones.py`:
+
+1. Crea copias de seguridad `respaldo_v2_*` de cada tabla que va a tocar (dentro de la misma base).
+2. Crea las tablas nuevas (`paises`, `ciudades`, `aerolineas`, `modelos_avion`, `reserva_excursiones`...) y las columnas nuevas.
+3. Copia los datos: los países y ciudades se deducen sin duplicados de los textos antiguos, los hoteles y excursiones se enlazan a su ciudad, las reservas conservan su número, total y estado, y cada excursión de una reserva queda con su cantidad y el precio con el que se vendió.
+4. Elimina las columnas que ya no se usan.
+
+Es idempotente (un segundo arranque no hace nada) y reanudable (si se corta a la mitad, el siguiente arranque continúa). Aun así, **antes del primer despliegue con datos que te importen, haz tu propia copia**:
 
 ```bash
 mysqldump --ssl-mode=REQUIRED -h HOST -P PUERTO -u USUARIO -p BASE > respaldo.sql
 ```
+
+Cuando compruebes que todo funciona, las tablas `respaldo_v2_*` se pueden borrar para liberar espacio.
 
 ---
 
@@ -40,9 +49,14 @@ ADMIN_EMAIL=admin@auroraviajes.com
 ADMIN_PASSWORD=<contrasena-fuerte>
 ENTORNO=produccion
 DEPURACION=false
+PROXIES_DE_CONFIANZA=1
 ORIGENES_PERMITIDOS=https://TU-FRONTEND
 FRONTEND_URL=https://TU-FRONTEND
 ```
+
+`ADMIN_PASSWORD` solo se usa **la primera vez**, cuando se crea el administrador (los arranques siguientes no la tocan). Si dejas la clave de ejemplo `Admin123!`, la cuenta obliga a cambiarla en el primer acceso, así que aun con esa clave no queda una puerta abierta. Si algún día pierdes el acceso, pon `ADMIN_RESTABLECER_CONTRASENA=true`, redespliega, entra y vuelve a ponerla en `false`.
+
+`PROXIES_DE_CONFIANZA=1` (Railway pone un proxy delante) hace que los límites de intentos identifiquen al cliente por su IP real. `DEPURACION` debe estar en `false`: encendida publica `/docs` y vuelca en el log cada consulta SQL con sus datos.
 
 Para generar `SECRET_KEY`:
 
@@ -76,11 +90,15 @@ grep -o "TU-BACKEND" dist/assets/*.js
 
 Si el proyecto está conectado a GitHub en el panel de Cloudflare, define `VITE_API_URL` en las variables de **build** (no en las de ejecución) y usa como comando de compilación `npm run build`.
 
+**Cabeceras de seguridad.** Cada compilación genera `dist/_headers`, que Cloudflare aplica a todas las respuestas: una política de contenido estricta (solo scripts y estilos propios, el mapa de Google y las llamadas a la API), `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy: no-referrer` y `Permissions-Policy`. El origen de la API que permite la política sale de `VITE_API_URL`, así que si el backend cambia de dirección basta con recompilar. Para comprobarlo: `curl -I https://TU-FRONTEND/` debe mostrar `content-security-policy`.
+
 ---
 
-## 4. Cerrar el CORS
+## 4. Cerrar el CORS y primer acceso
 
 Con el dominio del frontend ya generado, corrige en el backend `ORIGENES_PERMITIDOS` y `FRONTEND_URL` con esa URL, sin barra final, y redespliega. Se acepta JSON o una lista separada por comas.
+
+Después, entra por `/acceso-personal` con `ADMIN_EMAIL` y `ADMIN_PASSWORD` (si usaste la de ejemplo, la web te pedirá crear una propia). Desde el panel puedes crear las cuentas del equipo: nacen con una clave provisional que la persona debe cambiar al entrar. Los clientes se registran solos en `/registro`, y el personal puede dar de alta a un cliente desde el mostrador.
 
 ---
 
@@ -122,6 +140,10 @@ La base en Aiven y el frontend en Cloudflare no consumen créditos de Railway.
 **Errores de CORS.** El origen del frontend no coincide exactamente con `ORIGENES_PERMITIDOS`: compara esquema, subdominio y ausencia de barra final.
 
 **`'cryptography' package is required for ... caching_sha2_password`.** MySQL 8 usa ese método y necesita `cryptography`, que ya está en `requirements.txt`.
+
+**Los correos de recuperación no llegan.** Revisa las variables `SMTP_*` (y el log del backend: si faltan, avisa «SMTP no configurado»). Algunas plataformas bloquean los puertos SMTP salientes; en ese caso usa un proveedor con un puerto permitido (`python -m scripts.probar_smtp` prueba la conexión).
+
+**No puedo entrar y me pide cambiar la contraseña.** Es a propósito: las cuentas con clave provisional (las que crea un administrador y el administrador con la clave de ejemplo) tienen que fijar una propia antes de usar el panel.
 
 **Tildes y eñes mal.** El backend fuerza `charset=utf8mb4` cuando la URL no lo trae.
 

@@ -61,9 +61,9 @@ def _plantilla(titulo: str, saludo: str, contenido: str, boton: tuple[str, str] 
 
 
 async def enviar_correo_recuperacion(destinatario: str, nombre_usuario: str, token: str) -> bool:
-    enlace = f"{configuracion.frontend_url.rstrip('/')}/login?token={token}&vista=recuperar"
+    enlace = f"{configuracion.frontend_url.rstrip('/')}/restablecer?token={token}"
     texto = f"Aurora Viajes - Recuperar contraseña\n\nHola {nombre_usuario},\n\nUsa este enlace para crear una nueva contraseña:\n{enlace}\n\nEl enlace expira en 1 hora. Si no solicitaste el cambio, ignora este correo."
-    contenido = "<p>Recibimos una solicitud para cambiar tu contraseña.</p><p>El enlace expira en <strong>1 hora</strong>. Si no fuiste tú, puedes ignorar este mensaje.</p>"
+    contenido = "<p>Recibimos una solicitud para cambiar tu contraseña.</p><p>El enlace expira en <strong>1 hora</strong> y solo sirve una vez. Si no fuiste tú, puedes ignorar este mensaje: tu contraseña no cambia.</p>"
     return await _enviar("Recupera tu contraseña - Aurora Viajes", destinatario, texto, _plantilla("Recuperar contraseña", nombre_usuario, contenido, ("Crear nueva contraseña", enlace)))
 
 

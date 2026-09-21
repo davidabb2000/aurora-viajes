@@ -263,7 +263,7 @@ export default function AvanceCinco() {
   };
 
   const indicadores = datos?.indicadores;
-  return <main className="mx-auto w-[92%] max-w-275 flex-1 py-8 sm:py-12">
+  return <div className="mx-auto w-[92%] max-w-275 flex-1 py-8 sm:py-12">
     <section className="vidrio flex flex-wrap items-end justify-between gap-5 rounded-3xl p-6 sm:p-8">
       <div>
         <span className="antetitulo">Quinto entregable</span>
@@ -436,5 +436,5 @@ export default function AvanceCinco() {
       </form>
       {respuesta && <p className="vidrio-sutil mt-5 rounded-2xl border-l-4 border-l-acento p-4 text-sm leading-6 text-texto">{respuesta}</p>}
     </section>}
-  </main>;
+  </div>;
 }

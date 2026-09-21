@@ -1,7 +1,18 @@
-"""Esquemas de entrada del catálogo: productos, servicios, vuelos, hoteles, excursiones y paquetes."""
-from datetime import date, datetime
+"""Esquemas de entrada del catálogo: productos, servicios, lugares, vuelos, hoteles, excursiones y paquetes."""
+from datetime import datetime, timezone
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.schemas.reservas import limpiar_texto
+
+ESTADOS_VUELO_VALIDOS = ("programado", "abordando", "en_vuelo", "aterrizado", "cancelado")
+EstadoDeVuelo = Literal["programado", "abordando", "en_vuelo", "aterrizado", "cancelado"]
+
+
+def _sin_zona(valor: datetime) -> datetime:
+    """Las horas de los vuelos son la hora local del aeropuerto: se guardan sin zona horaria."""
+    return valor.astimezone(timezone.utc).replace(tzinfo=None) if valor.tzinfo else valor
 
 
 class ProductoCreate(BaseModel):
@@ -18,115 +29,163 @@ class ServicioCreate(BaseModel):
     activo: bool = True
 
 
-ESTADOS_VUELO_VALIDOS = {"programado", "abordando", "en_vuelo", "aterrizado", "cancelado"}
-AEROLINEAS_DISPONIBLES = {"Aurora Airlines", "Avianca", "LATAM", "Copa Airlines", "Iberia"}
-AVIONES_DISPONIBLES = {"Airbus A320", "Airbus A330", "Boeing 737", "Boeing 787", "Embraer E195"}
-CAPACIDAD_POR_AVION = {
-    "Airbus A320": 180,
-    "Airbus A330": 300,
-    "Boeing 737": 189,
-    "Boeing 787": 330,
-    "Embraer E195": 132,
-}
-ORIGENES_DISPONIBLES = {"Bogotá", "Medellín", "Cali", "Cartagena", "Barranquilla", "Lima", "Madrid"}
+class CiudadCreate(BaseModel):
+    nombre: str = Field(..., min_length=2, max_length=80)
+    pais: str = Field(..., min_length=2, max_length=80)
+
+    @field_validator("nombre", "pais")
+    @classmethod
+    def validar_texto(cls, value: str) -> str:
+        limpio = limpiar_texto(value)
+        if not limpio:
+            raise ValueError("Este campo es obligatorio.")
+        return limpio
+
+
+class AerolineaCreate(BaseModel):
+    codigo: str = Field(..., min_length=2, max_length=4, pattern=r"^[A-Za-z0-9]+$")
+    nombre: str = Field(..., min_length=2, max_length=80)
+
+    @field_validator("codigo")
+    @classmethod
+    def mayusculas(cls, value: str) -> str:
+        return value.upper()
+
+    @field_validator("nombre")
+    @classmethod
+    def validar_nombre(cls, value: str) -> str:
+        limpio = limpiar_texto(value)
+        if not limpio:
+            raise ValueError("Este campo es obligatorio.")
+        return limpio
+
+
+class ModeloAvionCreate(BaseModel):
+    nombre: str = Field(..., min_length=2, max_length=80)
+    capacidad: int = Field(..., ge=1, le=1000)
+
+    @field_validator("nombre")
+    @classmethod
+    def validar_nombre(cls, value: str) -> str:
+        limpio = limpiar_texto(value)
+        if not limpio:
+            raise ValueError("Este campo es obligatorio.")
+        return limpio
 
 
 class VueloCreate(BaseModel):
-    numeroVuelo: str | None = Field(default=None, min_length=2, max_length=20)
-    aerolinea: str = Field(..., min_length=2, max_length=80)
-    avion: str = Field(..., min_length=2, max_length=80)
-    origen: str = Field(..., min_length=2, max_length=120)
-    destino: str = Field(..., min_length=2, max_length=120)
+    numeroVuelo: str | None = Field(default=None, min_length=2, max_length=20, pattern=r"^[A-Za-z0-9-]+$")
+    aerolineaId: int = Field(..., ge=1)
+    modeloAvionId: int = Field(..., ge=1)
+    origenId: int = Field(..., ge=1)
+    destinoId: int = Field(..., ge=1)
     fechaSalida: datetime
     fechaLlegada: datetime
+    # Plazas a la venta. Sin indicarlas se venden todas las del modelo de avión.
     capacidadMaxima: int | None = Field(default=None, ge=1, le=1000)
     puerta: str | None = Field(default=None, max_length=10)
     terminal: str | None = Field(default=None, max_length=20)
-    estado: str = "programado"
+    estado: EstadoDeVuelo = "programado"
     activo: bool = True
 
-    @field_validator("aerolinea", "avion", "origen", "destino")
+    @field_validator("fechaSalida", "fechaLlegada")
     @classmethod
-    def validar_texto(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Este campo es obligatorio.")
-        return value
+    def quitar_zona(cls, value: datetime) -> datetime:
+        return _sin_zona(value)
 
-    @field_validator("aerolinea")
+    @field_validator("numeroVuelo")
     @classmethod
-    def validar_aerolinea(cls, value: str) -> str:
-        if value not in AEROLINEAS_DISPONIBLES:
-            raise ValueError("Selecciona una aerolínea válida.")
-        return value
+    def numero_en_mayusculas(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
 
-    @field_validator("avion")
+    @field_validator("puerta", "terminal")
     @classmethod
-    def validar_avion(cls, value: str) -> str:
-        if value not in AVIONES_DISPONIBLES:
-            raise ValueError("Selecciona un avión válido.")
-        return value
-
-    @field_validator("origen")
-    @classmethod
-    def validar_origen(cls, value: str) -> str:
-        if value not in ORIGENES_DISPONIBLES:
-            raise ValueError("Selecciona un origen válido del catálogo.")
-        return value
-
-    @field_validator("estado")
-    @classmethod
-    def validar_estado(cls, value: str) -> str:
-        if value not in ESTADOS_VUELO_VALIDOS:
-            raise ValueError("Estado de vuelo no válido.")
-        return value
+    def limpiar(cls, value: str | None) -> str | None:
+        return limpiar_texto(value)
 
     @model_validator(mode="after")
-    def validar_horario(self):
+    def validar_ruta_y_horario(self):
+        if self.origenId == self.destinoId:
+            raise ValueError("El origen y el destino del vuelo no pueden ser la misma ciudad.")
         if self.fechaLlegada <= self.fechaSalida:
             raise ValueError("La llegada debe ser posterior a la salida.")
-        self.capacidadMaxima = CAPACIDAD_POR_AVION[self.avion]
         return self
 
 
 class HotelCreate(BaseModel):
     nombre: str = Field(..., min_length=2, max_length=120)
-    ciudad: str = Field(..., min_length=2, max_length=120)
-    pais: str = Field(..., min_length=2, max_length=120)
+    ciudadId: int = Field(..., ge=1)
     estrellas: int = Field(..., ge=1, le=5)
     precioNoche: float = Field(default=0, ge=0)
     descripcion: str | None = Field(default=None, max_length=1000)
     activo: bool = True
 
+    @field_validator("nombre")
+    @classmethod
+    def limpiar_nombre(cls, value: str) -> str:
+        limpio = limpiar_texto(value)
+        if not limpio or len(limpio) < 2:
+            raise ValueError("El nombre es demasiado corto.")
+        return limpio
+
+    @field_validator("descripcion")
+    @classmethod
+    def limpiar_descripcion(cls, value: str | None) -> str | None:
+        return limpiar_texto(value)
+
 
 class ExcursionCreate(BaseModel):
     nombre: str = Field(..., min_length=2, max_length=120)
-    ciudad: str = Field(..., min_length=2, max_length=120)
-    pais: str = Field(..., min_length=2, max_length=120)
+    ciudadId: int = Field(..., ge=1)
     duracionHoras: int = Field(..., ge=1, le=48)
     precio: float = Field(default=0, ge=0)
     descripcion: str | None = Field(default=None, max_length=1000)
     activo: bool = True
 
+    @field_validator("nombre")
+    @classmethod
+    def limpiar_nombre(cls, value: str) -> str:
+        limpio = limpiar_texto(value)
+        if not limpio or len(limpio) < 2:
+            raise ValueError("El nombre es demasiado corto.")
+        return limpio
+
+    @field_validator("descripcion")
+    @classmethod
+    def limpiar_descripcion(cls, value: str | None) -> str | None:
+        return limpiar_texto(value)
+
 
 class PaqueteCreate(BaseModel):
+    """Un paquete une un vuelo de ida, uno de regreso, un hotel y excursiones a un precio cerrado."""
+
     nombre: str = Field(..., min_length=3, max_length=140)
     destinoId: int = Field(..., ge=1)
-    vueloId: int | None = Field(default=None, ge=1)
-    vuelo: VueloCreate | None = None
+    vueloId: int = Field(..., ge=1)
+    vueloRegresoId: int | None = Field(default=None, ge=1)
     hotelId: int = Field(..., ge=1)
     excursionIds: list[int] = Field(default_factory=list, max_length=20)
-    fechaSalida: date
-    fechaRegreso: date
+    noches: int | None = Field(default=None, ge=1, le=90, description="Obligatorio si no hay vuelo de regreso")
     precioBase: float = Field(default=0, ge=0)
     activo: bool = True
 
+    @field_validator("nombre")
+    @classmethod
+    def limpiar_nombre(cls, value: str) -> str:
+        limpio = limpiar_texto(value)
+        if not limpio or len(limpio) < 3:
+            raise ValueError("El nombre es demasiado corto.")
+        return limpio
+
+    @field_validator("excursionIds")
+    @classmethod
+    def sin_repetidas(cls, value: list[int]) -> list[int]:
+        if any(i < 1 for i in value):
+            raise ValueError("Hay una excursión con identificador inválido.")
+        return list(dict.fromkeys(value))
+
     @model_validator(mode="after")
-    def validar_fechas(self):
-        if self.fechaRegreso < self.fechaSalida:
-            raise ValueError("La fecha de regreso debe ser posterior a la salida.")
-        if self.vueloId is None and self.vuelo is None:
-            raise ValueError("Debes configurar el vuelo dentro de la reserva.")
-        if self.vueloId is not None and self.vuelo is not None:
-            raise ValueError("Usa un vuelo existente o configura uno nuevo, no ambos.")
+    def validar_duracion(self):
+        if self.vueloRegresoId is None and self.noches is None:
+            raise ValueError("Indica las noches del paquete o elige un vuelo de regreso.")
         return self

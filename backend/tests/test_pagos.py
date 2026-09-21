@@ -91,7 +91,7 @@ def test_checkout_rechaza_una_reserva_cancelada(api, admin, crear_cliente, viaje
 def test_checkout_de_la_reserva_de_otro_cliente_esta_prohibido(api, crear_cliente, viaje, reservar, stripe_falso):
     dueno, intruso = crear_cliente(), crear_cliente()
     reserva_id, _ = reservar(dueno, viaje)
-    assert api.post(f"/api/reservas/{reserva_id}/pago/checkout", headers=intruso.headers).status_code == 403
+    assert api.post(f"/api/reservas/{reserva_id}/pago/checkout", headers=intruso.headers).status_code == 404
 
 
 @pytest.mark.parametrize(

@@ -14,7 +14,8 @@ class Configuracion(BaseSettings):
 
     nombre_app: str = "Aurora Viajes API"
     entorno: str = "desarrollo"
-    depuracion: bool = True
+    # Apagado por defecto: encendido publica /docs y vuelca cada consulta SQL (con sus datos) en el log.
+    depuracion: bool = False
     origenes_permitidos: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -57,6 +58,15 @@ class Configuracion(BaseSettings):
 
     admin_email: str = "admin@auroraviajes.com"
     admin_password: str = "Admin123!"
+    # El administrador se crea una sola vez. Con ADMIN_RESTABLECER_CONTRASENA=true el
+    # siguiente arranque vuelve a fijar su clave a ADMIN_PASSWORD (para recuperar el acceso).
+    admin_restablecer_contrasena: bool = False
+
+    # Cuántos proxies de confianza hay delante de la app (Railway = 1). La IP del cliente es la
+    # de la derecha de X-Forwarded-For: lo que el cliente escriba a la izquierda no cuenta.
+    proxies_de_confianza: int = 1
+    # Tope del cuerpo de una petición. La API solo recibe JSON pequeño.
+    tamano_maximo_cuerpo: int = 1_000_000
     
     # Configuración de correos
     smtp_host: str | None = None
@@ -129,6 +139,12 @@ class Configuracion(BaseSettings):
             elif valor.upper() not in ("DISABLED", "FALSE", "0", ""):
                 exige_tls = True
         return urlunsplit(partes._replace(query=urlencode(limpia))), exige_tls
+
+    @model_validator(mode="after")
+    def endurecer_produccion(self):
+        if self.entorno.lower() in {"produccion", "producción", "production", "prod"}:
+            self.depuracion = False
+        return self
 
     @model_validator(mode="after")
     def construir_url_base_datos(self):

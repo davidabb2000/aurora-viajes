@@ -5,19 +5,20 @@ import logging
 
 from fastapi import APIRouter, Request
 
-from app.dependencias import ReservaDeRuta, SesionDep, UsuarioActual, exigir_acceso_a_reserva
+from app.dependencias import EmpleadoOAdmin, ReservaDeRuta, SesionDep, UsuarioActual, exigir_acceso_a_reserva
 from app.errores import ConflictoDeNegocio, ErrorDeDominio
 from app.models.dominio import Reserva
-from app.schemas.reservas import ConfirmacionDePago
+from app.schemas.reservas import ConfirmacionDePago, PagoDeMostrador
 from app.services.pagos import (
     crear_sesion,
+    expirar_sesion,
     monto_esperado,
     obtener_sesion,
     registrar_pago,
     validar_sesion_pagada,
     verificar_firma_webhook,
 )
-from app.services.reservas import opciones_carga_reserva
+from app.services.reservas import registrar_pago_de_mostrador
 
 logger = logging.getLogger("aurora-viajes.pagos")
 router = APIRouter(tags=["pagos"])
@@ -74,6 +75,16 @@ async def confirmar_pago(reserva: ReservaDeRuta, usuario: UsuarioActual, sesion:
     return {"mensaje": "Pago confirmado correctamente."}
 
 
+@router.post("/api/reservas/{reserva_id}/pago/manual")
+async def cobrar_en_mostrador(reserva: ReservaDeRuta, payload: PagoDeMostrador, personal: EmpleadoOAdmin, sesion: SesionDep):
+    """El personal registra un pago recibido en efectivo, por transferencia o con datáfono."""
+    sesion_de_pago = reserva.stripe_session_id
+    await registrar_pago_de_mostrador(sesion, reserva, payload, personal)
+    # Si había un enlace de Stripe abierto se cierra: la reserva no debe poder pagarse dos veces.
+    await expirar_sesion(sesion_de_pago)
+    return {"mensaje": "Pago registrado. La reserva quedó confirmada."}
+
+
 @router.post("/api/pagos/stripe/webhook")
 async def webhook_stripe(peticion: Request, sesion: SesionDep):
     """Stripe avisa aquí de cada pago, aunque el cliente cierre el navegador antes de volver."""
@@ -93,7 +104,7 @@ async def webhook_stripe(peticion: Request, sesion: SesionDep):
         logger.warning("Webhook %s sin reserva identificable.", evento.get("id"))
         return {"recibido": True, "aplicado": False}
 
-    reserva = await sesion.get(Reserva, reserva_id, options=opciones_carga_reserva())
+    reserva = await sesion.get(Reserva, reserva_id)
     if reserva is None:
         logger.warning("Webhook %s: la reserva %s ya no existe (¿pago de una reserva eliminada?).", evento.get("id"), reserva_id)
         return {"recibido": True, "aplicado": False}

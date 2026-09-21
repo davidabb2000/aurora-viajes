@@ -46,7 +46,7 @@ function Recomendaciones() {
   };
 
   return (
-    <main className="mx-auto w-[92%] max-w-275 flex-1 py-12 sm:py-16">
+    <div className="mx-auto w-[92%] max-w-275 flex-1 py-12 sm:py-16">
       <section className="vidrio rounded-3xl p-7 sm:p-10">
         <div className="max-w-2xl">
           <span className="antetitulo">IA de viajes</span>
@@ -169,7 +169,7 @@ function Recomendaciones() {
           </div>
         </section>
       )}
-    </main>
+    </div>
   );
 }
 

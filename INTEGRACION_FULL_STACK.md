@@ -16,24 +16,33 @@ Todo el tráfico pasa por `solicitar()` en [frontend/src/utils/api.js](frontend/
 - toma la URL base de `VITE_API_URL` o, si no existe, usa `/api` (en desarrollo Vite lo reenvía a `http://127.0.0.1:8001`, ver [vite.config.js](frontend/vite.config.js));
 - envía y recibe JSON;
 - **adjunta sola el token de la sesión**, de modo que las páginas no repiten la cabecera `Authorization`;
-- convierte los errores del backend en un mensaje legible y cierra la sesión si el token caducó.
+- convierte los errores del backend en un `ErrorApi` con mensaje legible, código y los problemas por campo (`detalles`), para pintarlos junto a cada input;
+- cierra la sesión si el token caducó o se revocó, y lleva a `/cambiar-contrasena` si la cuenta tiene una clave provisional (código `cambio_de_contrasena_requerido`).
 
 ### Sesión
 
-`guardarSesion()` guarda el token y el usuario en `localStorage` (si el usuario marca «Recordarme») o en `sessionStorage`. [AuthContext](frontend/src/context/AuthContext.jsx) los comparte con toda la app y se mantiene sincronizado entre pestañas. Las páginas protegidas (`Reservas`, `Panel`, pagos) redirigen a `/login` guardando en `state.desde` a dónde volver, y el Login devuelve al usuario allí tras entrar.
+`guardarSesion()` guarda el token y el usuario en `localStorage` (si el usuario marca «Recordarme») o en `sessionStorage`. [AuthContext](frontend/src/context/AuthContext.jsx) los comparte con toda la app, se mantiene sincronizado entre pestañas y ofrece `renovarSesion` (tras cambiar la contraseña, para tomar el token nuevo) y `cerrarTodasLasSesiones`.
+
+Las rutas protegidas usan [RutaProtegida](frontend/src/components/RutaProtegida.jsx): sin sesión redirigen a `/login` guardando en `state.desde` a dónde volver, y con una clave provisional llevan a `/cambiar-contrasena`. `SoloInvitados` hace lo contrario con `/login`, `/registro` y `/acceso-personal`: quien ya tiene sesión no las necesita. El token va en la cabecera `Authorization`, no en cookies.
 
 ### Estructura de `frontend/src`
 
 | Carpeta | Contenido |
 |---|---|
-| `pages/` | Una por ruta: `Index`, `Login`, `Reservas`, `Panel`, `AvanceCinco` (dashboard comercial), `Recomendaciones`, `PagoReserva`, `PagoExitoso`, `Contacto`, `QuienesSomos` |
-| `components/` | Piezas reutilizables: `Header`, `Footer`, `Sidebar`, formularios (`Input`, `Select`, `Button`, `Modal`), `DestinosGrid`, `Sponsors` y las decoraciones de la portada |
+| `pages/` | Una por ruta: `Index`, `Login`, `Registro`, `AccesoPersonal`, `RecuperarContrasena`, `RestablecerContrasena`, `CambiarContrasena`, `Reservas`, `Panel`, `AvanceCinco` (dashboard comercial), `Recomendaciones`, `PagoReserva`, `PagoExitoso`, `Contacto`, `QuienesSomos`, `NoEncontrada` |
+| `pages/panel/` | Una vista del panel cada una, elegida por `?vista=`: `ReservasPanel`, `NuevaReserva`, `VuelosPanel`, `CatalogoPanel`, `UsuariosPanel`, `MensajesPanel` |
+| `components/reserva/` | `AsistenteDeReserva` (el mismo para clientes y personal), sus pasos, `TarjetaDeVuelo`, `ResumenDeViaje`, `SelectorDeCliente`, `DetalleDeReserva` y `MisReservas` |
+| `components/` | `Header`, `Footer`, `Sidebar`, `RutaProtegida`, formularios (`Input`, `Select`, `Button`), `auth/` (marco de las pantallas de acceso e indicador de contraseña), `DestinosGrid`, `Sponsors` y las decoraciones de la portada |
 | `layouts/` | `ClientLayout` (cabecera, pie y WhatsApp) y `AdminLayout` (barra lateral del panel) |
 | `context/` | `AuthContext` |
-| `utils/` | `api.js` y `validaciones.js` (las mismas reglas que valida el backend) |
+| `utils/` | `api.js`, `validaciones.js` (las mismas reglas que valida el backend), `formato.js` (moneda, fechas), `rutas.js` y `useCarga.js` (carga de datos con estado de carga y error) |
 | `data/` | `destinos.js`: nombre, texto e ilustración de cada destino |
 
-El enrutado está en [App.jsx](frontend/src/App.jsx): las rutas `/panel*` usan `AdminLayout` cuando hay sesión; el resto, `ClientLayout`.
+El enrutado está en [App.jsx](frontend/src/App.jsx): las rutas `/panel*` usan `AdminLayout` cuando hay sesión (y la clave no es provisional); el resto, `ClientLayout`. Al cambiar de página se vuelve arriba, salvo si la dirección trae un ancla.
+
+### El asistente de reserva
+
+`AsistenteDeReserva` no repite ninguna fórmula: cada vez que cambia la selección pide `POST /reservas/cotizar` y muestra lo que devuelve el servidor (total, desglose, noches, plazas libres). Los vuelos, hoteles, excursiones y paquetes de un destino llegan en una sola llamada, `GET /catalogos/destinos/{id}/opciones`. Al editar una reserva se conservan las piezas que ya tenía aunque el catálogo las haya retirado, y la cotización lleva el `reservaId` para aplicar las reglas de la edición.
 
 ## Backend
 
@@ -46,17 +55,23 @@ Rutas JSON bajo `/api`, en capas que no se saltan:
 
 ### Seguridad
 
-- Las contraseñas se guardan con **argon2** y nunca en texto plano ([core/seguridad.py](backend/app/core/seguridad.py)).
-- La sesión es un **JWT** con un campo `purpose`: el token del correo de recuperación solo sirve para restablecer la contraseña y no abre sesión.
-- El rol se lee de la base en cada petición, no del token.
-- Login, registro, recuperación, contacto y chatbot tienen **límite de peticiones**; el chatbot además exige sesión y arma su contexto con mensajes que guardó el propio servidor.
-- Las respuestas llevan cabeceras de seguridad y CORS solo admite `ORIGENES_PERMITIDOS`.
+- Las contraseñas se guardan con **argon2** y nunca en texto plano ([core/seguridad.py](backend/app/core/seguridad.py)); la política (longitud, composición, lista de claves comunes, sin el correo ni el nombre) está en [core/politica_contrasena.py](backend/app/core/politica_contrasena.py) y el frontend la repite para avisar antes de enviar.
+- La sesión es un **JWT** con algoritmo fijo, campos obligatorios y un campo `purpose`: el token del correo de recuperación solo sirve para restablecer la contraseña y no abre sesión. Lleva además la versión de sesión del usuario (`sv`): cambiar la contraseña o el rol, desactivar la cuenta o «cerrar todas las sesiones» la incrementa y los tokens anteriores dejan de valer. El enlace de recuperación lleva una huella de la contraseña vigente, así que sirve una sola vez.
+- El rol y el estado de la cuenta se leen de la base en cada petición, no del token.
+- Las cuentas con **clave provisional** (las que crea un administrador, o el administrador con la clave de ejemplo) solo pueden cambiarla: el resto de la API responde `cambio_de_contrasena_requerido`.
+- Login, registro, recuperación, cotización, contacto y chatbot tienen **límite de peticiones**, por IP real (`X-Forwarded-For` contado desde la derecha) y, en el login, también por correo. El chatbot además exige sesión y arma su contexto con mensajes que guardó el propio servidor.
+- El login y la recuperación responden igual exista o no el correo.
+- Todo el SQL pasa por el ORM con parámetros, y una prueba estática impide construirlo con texto.
+- Las respuestas llevan cabeceras de seguridad, el cuerpo de la petición está limitado a 1 MB y CORS solo admite `ORIGENES_PERMITIDOS`.
 
 ### Una reserva de principio a fin
 
 ```
-POST /reservas ─▶ preparar_reserva()   valida vuelo, hotel y excursiones contra el catálogo y calcula el precio
+POST /reservas/cotizar ─▶ preparar_reserva(bloquear=False)   el precio que verá el cliente, sin guardar nada
+POST /reservas ─▶ preparar_reserva()   valida vuelos, hotel y excursiones contra el catálogo, bloquea las filas de
+                                       los vuelos, comprueba las plazas de ida y regreso y calcula el precio
               ─▶ crea Reserva + Venta (enlazada) + Factura, en una sola transacción
+              ─▶ si la crea el personal, puede cobrarla en el mismo paso (efectivo, transferencia o datáfono)
 POST /reservas/{id}/pago/checkout ─▶ un único enlace de Stripe abierto por reserva
 Stripe cobra ─▶ POST /pagos/stripe/webhook   (firmado)   ─▶ reserva "confirmada / pagada" y venta "completada"
              └▶ el navegador vuelve a /reservas/pago-exitoso y llama a .../pago/confirmar (respaldo)
@@ -66,4 +81,6 @@ Ambas vías de confirmación son idempotentes: da igual cuál llegue primero o s
 
 ### Base de datos
 
-Las tablas nacen de los modelos (`create_all`). Los cambios de esquema en bases ya existentes los aplica `services/siembra.py` al arrancar, de forma idempotente y solo en MySQL; hoy incluyen la columna `ventas.reserva_id` y el emparejamiento de las ventas anteriores con su reserva. Para bases nuevas y para documentar, `sql/schema.sql` se genera desde los modelos con `python -m scripts.exportar_esquema`.
+Las tablas nacen de los modelos (`create_all`), normalizadas a 3FN: los lugares (`paises` → `ciudades`), las aerolíneas y los modelos de avión son tablas propias, y vuelos, hoteles, excursiones y destinos las referencian por identificador. El detalle está en el [README](README.md#modelo-de-datos-3fn).
+
+Al arrancar sobre una base MySQL con el esquema anterior, `services/migraciones.py` la migra (con copias `respaldo_v2_*`, de forma idempotente y reanudable) y después `services/siembra.py` completa los datos iniciales y repone la programación de vuelos. Para bases nuevas y para documentar, `sql/schema.sql` se genera desde los modelos con `python -m scripts.exportar_esquema`.
