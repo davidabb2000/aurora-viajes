@@ -1,7 +1,10 @@
 """Catálogo normalizado: lugares únicos, vuelos, hoteles, excursiones y paquetes con reglas de integridad."""
+import itertools
 from datetime import date, timedelta
 
-from tests.conftest import cuerpo_de_reserva, cuerpo_de_vuelo
+import pytest
+
+from tests.conftest import cuerpo_de_reserva, cuerpo_de_vuelo, letras
 
 
 def cuerpo_de_hotel(ciudad, nombre="Hotel de Prueba", **cambios):
@@ -243,3 +246,102 @@ def test_desactivar_un_paquete_no_afecta_a_las_reservas_hechas(api, admin, crear
     assert api.post("/api/reservas", headers=cliente.headers, json=cuerpo_de_reserva(viaje, "paquete", 1)).status_code == 400
     reserva = api.get(f"/api/reservas/{reserva_id}", headers=cliente.headers).json()
     assert reserva["paquete"]["nombre"] == viaje.paquete["nombre"]
+
+
+# --------------------------------------------------------------------------------------
+# Destinos
+# --------------------------------------------------------------------------------------
+
+
+_ciudades_nuevas = itertools.count(1)
+
+
+@pytest.fixture(autouse=True)
+def _retirar_los_destinos_de_prueba(api, admin):
+    """La base es la misma para toda la suite: los destinos que crea una prueba se desactivan al terminar, y así el
+    catálogo público vuelve a tener solo los de ejemplo para las pruebas que cuentan con ellos."""
+    yield
+    for destino in api.get("/api/destinos", headers=admin).json():
+        if destino["pais"] == "Portugal":
+            api.delete(f"/api/destinos/{destino['id']}", headers=admin)
+
+
+def ciudad_nueva(api, admin):
+    """Una ciudad que ningún otro destino usa, para no chocar con los datos de ejemplo ni con otras pruebas."""
+    nombre = f"Villa {letras(next(_ciudades_nuevas))}"
+    respuesta = api.post("/api/ciudades", headers=admin, json={"nombre": nombre, "pais": "Portugal"})
+    assert respuesta.status_code == 201, respuesta.text
+    return respuesta.json()
+
+
+def cuerpo_de_destino(ciudad, **cambios):
+    cuerpo = {"ciudadId": ciudad["id"], "descripcion": "Un destino de prueba.", "precioBase": 3_500_000, "imagenSlug": None, "activo": True}
+    cuerpo.update(cambios)
+    return cuerpo
+
+
+def test_el_administrador_crea_un_destino_y_aparece_en_el_catalogo_publico(api, admin):
+    ciudad = ciudad_nueva(api, admin)
+    creado = api.post("/api/destinos", headers=admin, json=cuerpo_de_destino(ciudad))
+    assert creado.status_code == 201, creado.text
+    assert creado.json()["nombre"] == f"{ciudad['nombre']}, Portugal" and creado.json()["precioBase"] == 3_500_000
+
+    publico = api.get("/api/catalogos/destinos").json()
+    assert creado.json()["id"] in [d["id"] for d in publico]
+    # Sin vuelos ni hoteles todavía: se puede abrir, y sus listas están vacías.
+    opciones = api.get(f"/api/catalogos/destinos/{creado.json()['id']}/opciones")
+    assert opciones.status_code == 200 and opciones.json()["vuelosIda"] == [] and opciones.json()["hoteles"] == []
+
+
+def test_una_ciudad_solo_es_destino_una_vez(api, admin):
+    una, otra = ciudad_nueva(api, admin), ciudad_nueva(api, admin)
+    primero = api.post("/api/destinos", headers=admin, json=cuerpo_de_destino(una)).json()
+    segundo = api.post("/api/destinos", headers=admin, json=cuerpo_de_destino(otra)).json()
+
+    repetido = api.post("/api/destinos", headers=admin, json=cuerpo_de_destino(una))
+    assert repetido.status_code == 409 and "ya es un destino" in repetido.json()["mensaje"]
+    mover = api.put(f"/api/destinos/{segundo['id']}", headers=admin, json=cuerpo_de_destino(una))
+    assert mover.status_code == 409
+    # Guardar un destino con su propia ciudad, en cambio, es lo normal al editarlo.
+    assert api.put(f"/api/destinos/{primero['id']}", headers=admin, json=cuerpo_de_destino(una, precioBase=4_000_000)).json()["precioBase"] == 4_000_000
+
+
+def test_los_datos_de_un_destino_se_validan(api, admin, catalogo):
+    ciudad = ciudad_nueva(api, admin)
+    assert api.post("/api/destinos", headers=admin, json=cuerpo_de_destino(ciudad, precioBase=0)).status_code == 422
+    assert api.post("/api/destinos", headers=admin, json=cuerpo_de_destino(ciudad, imagenSlug="Con Espacios")).status_code == 422
+    assert api.post("/api/destinos", headers=admin, json=cuerpo_de_destino({"id": 99_999_999})).status_code == 404
+    assert api.put("/api/destinos/99999999", headers=admin, json=cuerpo_de_destino(ciudad)).status_code == 404
+
+
+def test_solo_el_administrador_gestiona_destinos(api, crear_empleado, crear_cliente, admin):
+    empleado, cliente = crear_empleado(), crear_cliente()
+    ciudad = ciudad_nueva(api, admin)
+    assert api.post("/api/destinos", headers=empleado.headers, json=cuerpo_de_destino(ciudad)).status_code == 403
+    assert api.post("/api/destinos", headers=cliente.headers, json=cuerpo_de_destino(ciudad)).status_code == 403
+    assert api.get("/api/destinos", headers=empleado.headers).status_code == 200  # el personal los ve, también los inactivos
+    assert api.get("/api/destinos", headers=cliente.headers).status_code == 403
+
+
+def test_desactivar_un_destino_lo_saca_del_catalogo_pero_no_de_las_reservas(api, admin, catalogo, crear_cliente):
+    ciudad = ciudad_nueva(api, admin)
+    destino = api.post("/api/destinos", headers=admin, json=cuerpo_de_destino(ciudad)).json()
+    salida = date.today() + timedelta(days=150)
+    vuelo = api.post("/api/vuelos", headers=admin, json=cuerpo_de_vuelo(catalogo, catalogo.bogota, ciudad, f"{salida}T08:00:00"))
+    assert vuelo.status_code == 201, vuelo.text
+    cliente = crear_cliente()
+    reserva = api.post("/api/reservas", headers=cliente.headers, json={
+        "destinoId": destino["id"], "vueloId": vuelo.json()["id"], "fechaRegreso": str(salida + timedelta(days=3)), "pasajeros": 1, "telefonoContacto": "3001112233",
+    })
+    assert reserva.status_code == 201, reserva.text
+
+    # Con reservas, el destino no cambia de ciudad.
+    otra = ciudad_nueva(api, admin)
+    assert api.put(f"/api/destinos/{destino['id']}", headers=admin, json=cuerpo_de_destino(otra)).status_code == 409
+
+    assert api.delete(f"/api/destinos/{destino['id']}", headers=admin).status_code == 200
+    assert destino["id"] not in [d["id"] for d in api.get("/api/catalogos/destinos").json()]
+    assert api.get(f"/api/catalogos/destinos/{destino['id']}/opciones").status_code == 404
+    assert next(d for d in api.get("/api/destinos", headers=admin).json() if d["id"] == destino["id"])["activo"] is False
+    # La reserva ya hecha sigue ahí.
+    assert api.get(f"/api/reservas/{reserva.json()['id']}", headers=cliente.headers).status_code == 200

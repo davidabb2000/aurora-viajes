@@ -9,6 +9,7 @@ const PESTANAS = [
   ["paquetes", "Paquetes"],
   ["hoteles", "Hoteles"],
   ["excursiones", "Excursiones"],
+  ["destinos", "Destinos"],
   ["lugares", "Lugares"],
 ];
 
@@ -331,6 +332,127 @@ function PestanaDePaquetes({ avisar }) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Destinos: las ciudades que se venden
+// ---------------------------------------------------------------------------------------------
+
+function FormularioDeDestino({ destino, ciudades, ocupadas, alGuardar, alCancelar }) {
+  const [valores, setValores] = useState(() =>
+    destino
+      ? { ciudadId: String(destino.ciudadId), descripcion: destino.descripcion || "", precioBase: String(destino.precioBase), activo: destino.activo }
+      : { ciudadId: "", descripcion: "", precioBase: "", activo: true },
+  );
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const cambiar = (evento) => {
+    const { name, value, type, checked } = evento.target;
+    setValores((actual) => ({ ...actual, [name]: type === "checkbox" ? checked : value }));
+  };
+
+  const guardar = async (evento) => {
+    evento.preventDefault();
+    setGuardando(true);
+    setError("");
+    const cuerpo = {
+      ciudadId: Number(valores.ciudadId),
+      descripcion: valores.descripcion || null,
+      precioBase: Number(valores.precioBase),
+      // La ilustración de los destinos de ejemplo no se edita aquí: se conserva la que ya tenían.
+      imagenSlug: destino?.imagenSlug ?? null,
+      activo: valores.activo,
+    };
+    try {
+      await solicitar(destino ? `/destinos/${destino.id}` : "/destinos", { method: destino ? "PUT" : "POST", body: JSON.stringify(cuerpo) });
+      alGuardar(destino ? "Cambios guardados." : "Destino creado.");
+    } catch (requestError) {
+      setError(requestError.message);
+      setGuardando(false);
+    }
+  };
+
+  const disponibles = ciudades.filter((ciudad) => !ocupadas.has(ciudad.id) || ciudad.id === destino?.ciudadId);
+  return (
+    <form onSubmit={guardar} className="vidrio rounded-3xl p-6">
+      <h2 className="text-2xl text-primario">{destino ? "Modificar" : "Agregar"} destino</h2>
+      {!destino && <p className="mt-1 text-sm text-texto-suave">Elige una ciudad que aún no sea destino (si falta, agrégala en «Lugares»). Después dale vuelos, hoteles y excursiones.</p>}
+      <div className="mt-4 grid gap-4">
+        <label className="text-sm font-medium text-texto">Ciudad <span className="text-acento">*</span>
+          <select name="ciudadId" required value={valores.ciudadId} onChange={cambiar} className={`${CAMPO} mt-1.5`}>
+            <option value="">Selecciona una ciudad</option>
+            {disponibles.map((ciudad) => <option key={ciudad.id} value={ciudad.id}>{ciudad.nombre}, {ciudad.pais}</option>)}
+          </select>
+        </label>
+        <label className="text-sm font-medium text-texto">Tarifa aérea por pasajero <span className="text-acento">*</span>
+          <input name="precioBase" type="number" required min="1000" step="1000" value={valores.precioBase} onChange={cambiar} className={`${CAMPO} mt-1.5`} />
+        </label>
+        <label className="text-sm font-medium text-texto">Descripción<textarea name="descripcion" rows={4} maxLength={2000} value={valores.descripcion} onChange={cambiar} className={`${CAMPO} mt-1.5 resize-y`} /></label>
+        <label className="flex items-center gap-2 text-sm font-medium text-texto"><input type="checkbox" name="activo" checked={valores.activo} onChange={cambiar} className="h-4 w-4 accent-primario" /> Visible para los clientes</label>
+      </div>
+      {error && <p role="alert" className={`${CAJA_ERROR} mt-4`}>{error}</p>}
+      <div className="mt-5 flex gap-3">
+        <button type="submit" disabled={guardando} className="boton-tinta px-6 py-2.5 text-sm font-semibold">{guardando ? "Guardando…" : destino ? "Guardar cambios" : "Crear"}</button>
+        {destino && <button type="button" onClick={alCancelar} className={BOTON_VIDRIO}>Cancelar</button>}
+      </div>
+    </form>
+  );
+}
+
+function PestanaDeDestinos({ ciudades, avisar }) {
+  const carga = useCarga("/destinos");
+  const [editando, setEditando] = useState(null);
+  const [reinicio, setReinicio] = useState(0);
+  const destinos = carga.datos ?? [];
+
+  const desactivar = async (destino) => {
+    try {
+      await solicitar(`/destinos/${destino.id}`, { method: "DELETE" });
+      avisar(`${destino.nombre} desactivado: ya no se ofrece a los clientes.`);
+      carga.recargar();
+    } catch (error) {
+      avisar(error.message, "error");
+    }
+  };
+
+  return (
+    <Disposicion
+      titulo="Destinos"
+      lista={
+        <>
+          <Aviso mensaje={carga.error} tipo="error" />
+          {carga.datos === null && <p className="text-sm text-texto-suave">Cargando…</p>}
+          {destinos.map((destino) => (
+            <article key={destino.id} className="vidrio-sutil flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
+              <div>
+                <p className="font-semibold text-texto">{destino.nombre} <Insignia activo={destino.activo} /></p>
+                <p className="text-xs text-texto-suave">Desde {moneda(destino.precioBase)} por pasajero{destino.descripcion ? ` · ${destino.descripcion.slice(0, 90)}${destino.descripcion.length > 90 ? "…" : ""}` : ""}</p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setEditando(destino)} className={BOTON_VIDRIO}>Modificar</button>
+                {destino.activo && <button type="button" onClick={() => desactivar(destino)} className="px-3 py-2 text-sm font-medium text-red-700 underline">Desactivar</button>}
+              </div>
+            </article>
+          ))}
+        </>
+      }
+      formulario={
+        <FormularioDeDestino
+          key={`destino-${editando?.id ?? "nuevo"}-${reinicio}`}
+          destino={editando}
+          ciudades={ciudades}
+          ocupadas={new Set(destinos.map((destino) => destino.ciudadId))}
+          alCancelar={() => setEditando(null)}
+          alGuardar={(mensaje) => {
+            setEditando(null);
+            setReinicio((actual) => actual + 1);
+            avisar(mensaje);
+            carga.recargar();
+          }}
+        />
+      }
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
 // Lugares
 // ---------------------------------------------------------------------------------------------
 
@@ -397,6 +519,7 @@ function CatalogoPanel() {
       {pestana === "paquetes" && <PestanaDePaquetes avisar={avisar} />}
       {pestana === "hoteles" && <PestanaDeElementos tipo="hoteles" ciudades={ciudades.datos ?? []} avisar={avisar} />}
       {pestana === "excursiones" && <PestanaDeElementos tipo="excursiones" ciudades={ciudades.datos ?? []} avisar={avisar} />}
+      {pestana === "destinos" && <PestanaDeDestinos ciudades={ciudades.datos ?? []} avisar={avisar} />}
       {pestana === "lugares" && <PestanaDeLugares ciudades={ciudades.datos ?? []} recargarCiudades={ciudades.recargar} avisar={avisar} />}
     </div>
   );

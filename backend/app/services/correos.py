@@ -6,6 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import aiosmtplib
+import httpx
 
 from app.core.configuracion import configuracion
 
@@ -26,7 +27,32 @@ def _mensaje(asunto: str, destinatario: str, texto: str, cuerpo_html: str) -> MI
     return mensaje
 
 
+async def _enviar_por_sendgrid(asunto: str, destinatario: str, texto: str, cuerpo_html: str) -> bool:
+    """Envía por la API HTTPS de SendGrid (202 = aceptado). Nunca escribe la clave en el log."""
+    carga = {
+        "personalizations": [{"to": [{"email": destinatario}]}],
+        "from": {"email": configuracion.smtp_from, "name": "Aurora Viajes"},
+        "subject": asunto,
+        "content": [{"type": "text/plain", "value": texto}, {"type": "text/html", "value": cuerpo_html}],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as cliente:
+            respuesta = await cliente.post(
+                configuracion.sendgrid_api_url, json=carga, headers={"Authorization": f"Bearer {configuracion.sendgrid_api_key}"}
+            )
+    except httpx.HTTPError:
+        logger.exception("No se pudo llegar a SendGrid al enviar correo a %s: %s", destinatario, asunto)
+        return False
+    if respuesta.status_code != 202:
+        logger.error("SendGrid rechazó el correo para %s (HTTP %s): %s", destinatario, respuesta.status_code, respuesta.text[:300])
+        return False
+    logger.info("Correo transaccional enviado a %s por SendGrid: %s", destinatario, asunto)
+    return True
+
+
 async def _enviar(asunto: str, destinatario: str, texto: str, cuerpo_html: str) -> bool:
+    if configuracion.sendgrid_api_key:
+        return await _enviar_por_sendgrid(asunto, destinatario, texto, cuerpo_html)
     if not configuracion.smtp_host or not configuracion.smtp_user or not configuracion.smtp_password:
         logger.warning("SMTP no configurado. Correo para %s no enviado.", destinatario)
         return False

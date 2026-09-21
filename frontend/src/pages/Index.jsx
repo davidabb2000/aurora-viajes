@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import destinosBase from "../data/destinos";
+import destinosBase, { ilustracionGenerica } from "../data/destinos";
 import { solicitar } from "../utils/api";
 import DestinosGrid from "../components/DestinosGrid";
 import Sponsors from "../components/Sponsors";
@@ -57,14 +57,19 @@ function Index() {
     };
   }, []);
 
-  const destinos = useMemo(
-    () =>
-      destinosBase.map((destino) => {
-        const vivo = catalogo.find((item) => item.nombre === destino.titulo);
-        return { ...destino, id: vivo?.id ?? destino.id, precioBase: vivo?.precioBase ?? 0 };
-      }),
-    [catalogo],
-  );
+  // Con el catálogo a la vista se muestran los destinos que hay hoy (los de la portada, en su orden, y los que el
+  // administrador haya agregado, con una ilustración genérica). Sin catálogo (la API no responde) quedan los de siempre, sin precio.
+  const destinos = useMemo(() => {
+    if (catalogo.length === 0) return destinosBase.map((destino) => ({ ...destino, precioBase: 0 }));
+    const conIlustracion = new Map(destinosBase.map((destino) => [destino.titulo, destino]));
+    const propios = catalogo.filter((vivo) => conIlustracion.has(vivo.nombre)).map((vivo) => ({ ...conIlustracion.get(vivo.nombre), id: vivo.id, precioBase: vivo.precioBase }));
+    const orden = new Map(destinosBase.map((destino, posicion) => [destino.titulo, posicion]));
+    propios.sort((a, b) => orden.get(a.titulo) - orden.get(b.titulo));
+    const agregados = catalogo
+      .filter((vivo) => !conIlustracion.has(vivo.nombre))
+      .map((vivo) => ({ id: vivo.id, imagen: ilustracionGenerica, titulo: vivo.nombre, descripcion: vivo.descripcion || "", precioBase: vivo.precioBase }));
+    return [...propios, ...agregados];
+  }, [catalogo]);
 
   useEffect(() => {
     if (hash) document.querySelector(hash)?.scrollIntoView({ behavior: "smooth" });

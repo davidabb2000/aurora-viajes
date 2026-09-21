@@ -16,7 +16,7 @@ Orden: **base → backend → frontend**, y al final se vuelve al backend para c
 
 Crea un servicio MySQL gratuito y copia su URI (`mysql://usuario:clave@host:puerto/base?ssl-mode=REQUIRED`). Es lo único que necesitas: el backend crea las tablas y carga los datos iniciales (destinos, vuelos, hoteles, excursiones, paquetes, roles y el administrador) al arrancar. No hay que importar ningún `.sql`.
 
-`DATABASE_URL` puede llevar la URI tal cual: el backend cambia el esquema a `mysql+aiomysql://`, fuerza `charset=utf8mb4` y activa TLS al ver `ssl-mode`. Sin certificado de CA propio la conexión va cifrada pero **no se verifica el certificado**; para verificarlo, descarga el CA de Aiven y apunta `MYSQL_SSL_CA` a él.
+`DATABASE_URL` puede llevar la URI tal cual: el backend cambia el esquema a `mysql+aiomysql://`, fuerza `charset=utf8mb4` y activa TLS al ver `ssl-mode`. Sin certificado de CA propio la conexión va cifrada pero **no se verifica el certificado**. Para verificarlo, descarga el certificado de CA del servicio (en Aiven: **Overview → CA certificate**) y pega su contenido, tal cual, en la variable `MYSQL_SSL_CA_PEM` del backend (Railway admite varias líneas; también sirve en una sola línea con `\n` escritos a mano). Con eso se comprueba que el certificado del servidor lo firme esa CA (`VERIFY_CA`, lo que recomienda Aiven). Si prefieres un archivo, `MYSQL_SSL_CA` acepta una ruta. Si además quieres exigir que coincida el nombre del servidor, pon `MYSQL_SSL_VERIFICAR_HOST=true`. Un PEM mal pegado impide arrancar con un mensaje claro.
 
 **Migraciones.** Las tablas ya existentes no las modifica `create_all`, así que el backend, al arrancar, detecta el esquema anterior y lo migra al normalizado (3FN) con `services/migraciones.py`:
 
@@ -64,9 +64,11 @@ Para generar `SECRET_KEY`:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Opcionales, según se usen: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PROVEEDOR_IA_API_KEY`, `PROVEEDOR_IA_URL`, `PROVEEDOR_IA_MODELO` y `SMTP_*`. Sin clave de IA las recomendaciones funcionan con el respaldo local por palabras clave y el chatbot responde con un texto fijo.
+Opcionales, según se usen: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PROVEEDOR_IA_API_KEY`, `PROVEEDOR_IA_URL`, `PROVEEDOR_IA_MODELO`, `MYSQL_SSL_CA_PEM` y el correo (`SENDGRID_API_KEY` o `SMTP_*`). Sin clave de IA las recomendaciones funcionan con el respaldo local por palabras clave y el chatbot responde con un texto fijo.
 
-Verificación: `https://TU-BACKEND.up.railway.app/api/health` debe devolver `{"estado":"ok"}`. Con `DEPURACION=false` el `/docs` queda deshabilitado a propósito.
+**Correo.** Railway bloquea el SMTP saliente en los planes que no son Pro, así que con `SMTP_*` los correos de recuperación pueden no salir. La alternativa es la API HTTPS de SendGrid: crea una clave de API con permiso «Mail Send», verifica el remitente (Single Sender) y define `SENDGRID_API_KEY` y `SMTP_FROM` (el remitente verificado). Para probarlo antes de desplegar: `python -m scripts.probar_correo tu@correo.com` desde `backend/`.
+
+Verificación: `https://TU-BACKEND.up.railway.app/api/health` debe devolver `{"estado":"ok","baseDeDatos":"lista"}`. Con `"sin conexion"` la API vive pero no llega a la base (mira la sección «Problemas frecuentes»). Con `DEPURACION=false` el `/docs` queda deshabilitado a propósito.
 
 La imagen instala solo `requirements.txt`. Lo que solo necesitan las pruebas (`pytest`, cobertura) está en `requirements-dev.txt` y no se despliega.
 
@@ -74,7 +76,7 @@ La imagen instala solo `requirements.txt`. Lo que solo necesitan las pruebas (`p
 
 ## 3. Frontend (Cloudflare)
 
-Son archivos estáticos: no necesitan un contenedor encendido. `frontend/wrangler.jsonc` sirve `dist/` como un Worker con assets, y `not_found_handling: "single-page-application"` hace que cualquier ruta desconocida devuelva `index.html` y la resuelva React Router.
+Son archivos estáticos: no necesitan un contenedor encendido. **El despliegue lo haces tú con `npm run deploy`** (compila y ejecuta `wrangler deploy`); si el proyecto no está conectado a GitHub en el panel de Cloudflare, un `git push` no actualiza la web por sí solo. `frontend/wrangler.jsonc` sirve `dist/` como un Worker con assets, y `not_found_handling: "single-page-application"` hace que cualquier ruta desconocida devuelva `index.html` y la resuelva React Router.
 
 ```bash
 cd frontend
@@ -133,6 +135,8 @@ La base en Aiven y el frontend en Cloudflare no consumen créditos de Railway.
 
 ## Problemas frecuentes
 
+**`/api/health` dice `"baseDeDatos": "sin conexion"` y todo devuelve 503.** El backend está vivo pero no llega a la base. Con un servicio gestionado, casi siempre está **apagado** (el plan gratuito de Aiven se apaga tras un tiempo sin uso; a veces el nombre del servidor deja de resolver): enciéndelo desde su consola y espera unos minutos. No hace falta redesplegar: el backend reintenta solo cada pocos segundos y, cuando la base responde, termina de prepararla (y migra, si toca). Si la base se recreó de cero, se crea y se siembra sola, pero se pierden los datos anteriores. Antes de encender una base con datos que importan, haz el `mysqldump` de la sección 1: el backend la migrará en cuanto pueda conectarse. `"error"` significa que la preparación falló por otra causa (mira el log).
+
 **El backend reinicia en bucle.** Casi siempre es `SECRET_KEY` sin definir: la aplicación no arranca sin ella.
 
 **El frontend carga pero ninguna llamada funciona.** `VITE_API_URL` quedó en su valor por defecto `/api`. Corrígela y **vuelve a compilar y desplegar** para reconstruir el bundle.
@@ -141,7 +145,7 @@ La base en Aiven y el frontend en Cloudflare no consumen créditos de Railway.
 
 **`'cryptography' package is required for ... caching_sha2_password`.** MySQL 8 usa ese método y necesita `cryptography`, que ya está en `requirements.txt`.
 
-**Los correos de recuperación no llegan.** Revisa las variables `SMTP_*` (y el log del backend: si faltan, avisa «SMTP no configurado»). Algunas plataformas bloquean los puertos SMTP salientes; en ese caso usa un proveedor con un puerto permitido (`python -m scripts.probar_smtp` prueba la conexión).
+**Los correos de recuperación no llegan.** Mira el log del backend: «SMTP no configurado» si faltan las variables, o el motivo del rechazo del proveedor. Railway bloquea el SMTP saliente en los planes que no son Pro: usa `SENDGRID_API_KEY` (correo por HTTPS). `python -m scripts.probar_correo tu@correo.com` envía uno de prueba con la configuración de `backend/.env`.
 
 **No puedo entrar y me pide cambiar la contraseña.** Es a propósito: las cuentas con clave provisional (las que crea un administrador y el administrador con la clave de ejemplo) tienen que fijar una propia antes de usar el panel.
 

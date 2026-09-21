@@ -3,7 +3,7 @@ import IndicadorContrasena from "../../components/auth/IndicadorContrasena";
 import Input from "../../components/Input";
 import Select from "../../components/Select";
 import { BOTON_VIDRIO, CAMPO } from "../../components/reserva/estilos";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { solicitar } from "../../utils/api";
 import { fecha } from "../../utils/formato";
 import {

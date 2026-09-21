@@ -176,7 +176,7 @@ function ReservasPanel() {
 
                 <details className="mt-4">
                   <summary className="cursor-pointer text-sm font-semibold text-primario">Ver detalle completo</summary>
-                  <div className="mt-4"><DetalleDeReserva reserva={reserva} conCliente /></div>
+                  <div className="mt-4"><DetalleDeReserva reserva={reserva} conCliente alCambiar={recargar} /></div>
                 </details>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-primario/12 pt-4">

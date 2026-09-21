@@ -4,6 +4,7 @@ import { solicitar } from "../../utils/api";
 import { fechaHora } from "../../utils/formato";
 import { useCarga } from "../../utils/useCarga";
 import { Aviso, EncabezadoDePanel, Paginacion } from "./Encabezado";
+import ManifiestoDeVuelo from "./ManifiestoDeVuelo";
 
 const ESTADOS = [
   ["programado", "Programado"],
@@ -126,6 +127,7 @@ function VuelosPanel({ esAdmin }) {
   const [pagina, setPagina] = useState(1);
   const [editando, setEditando] = useState(null);
   const [confirmando, setConfirmando] = useState(null);
+  const [conManifiesto, setConManifiesto] = useState(null);
   const [reinicio, setReinicio] = useState(0);
   const [aviso, setAviso] = useState({ mensaje: "", tipo: "info" });
   const vuelos = useCarga(`/vuelos?pasados=${verPasados}`);
@@ -184,17 +186,23 @@ function VuelosPanel({ esAdmin }) {
                     <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-primario/10" aria-hidden="true"><div className={`h-full rounded-full ${porcentaje >= 90 ? "bg-acento" : "bg-primario"}`} style={{ width: `${porcentaje}%` }} /></div>
                     <p className="mt-2 text-xs"><span className={`rounded-full px-2.5 py-0.5 font-semibold capitalize ${vuelo.estado === "cancelado" ? "bg-red-100 text-red-700" : "bg-primario/8 text-primario"}`}>{vuelo.estado.replace("_", " ")}</span>{!vuelo.activo && <span className="ml-2 rounded-full bg-arena px-2.5 py-0.5 font-semibold text-texto-suave">Inactivo</span>}</p>
                   </div>
-                  {esAdmin && (
-                    <div className="flex flex-wrap gap-2 md:justify-end">
-                      <button type="button" onClick={() => { setEditando(vuelo); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }} className={BOTON_VIDRIO}>Modificar</button>
-                      {confirmando === vuelo.id ? (
-                        <span className="flex items-center gap-2 text-sm text-red-700">¿Eliminar? <button type="button" onClick={() => eliminar(vuelo)} className="font-semibold underline">Sí</button> <button type="button" onClick={() => setConfirmando(null)} className="font-semibold">No</button></span>
-                      ) : (
-                        <button type="button" onClick={() => setConfirmando(vuelo.id)} className="px-3 py-2 text-sm font-medium text-red-700 underline">Eliminar</button>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2 md:justify-end">
+                    <button type="button" aria-expanded={conManifiesto === vuelo.id} onClick={() => setConManifiesto(conManifiesto === vuelo.id ? null : vuelo.id)} className={BOTON_VIDRIO}>
+                      {conManifiesto === vuelo.id ? "Ocultar manifiesto" : "Manifiesto"}
+                    </button>
+                    {esAdmin && (
+                      <>
+                        <button type="button" onClick={() => { setEditando(vuelo); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }} className={BOTON_VIDRIO}>Modificar</button>
+                        {confirmando === vuelo.id ? (
+                          <span className="flex items-center gap-2 text-sm text-red-700">¿Eliminar? <button type="button" onClick={() => eliminar(vuelo)} className="font-semibold underline">Sí</button> <button type="button" onClick={() => setConfirmando(null)} className="font-semibold">No</button></span>
+                        ) : (
+                          <button type="button" onClick={() => setConfirmando(vuelo.id)} className="px-3 py-2 text-sm font-medium text-red-700 underline">Eliminar</button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
+                {conManifiesto === vuelo.id && <ManifiestoDeVuelo vuelo={vuelo} />}
               </article>
             );
           })}

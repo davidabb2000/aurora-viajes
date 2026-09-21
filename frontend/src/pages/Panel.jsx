@@ -1,6 +1,6 @@
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import MisReservas from "../components/reserva/MisReservas";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { esPersonal } from "../utils/rutas";
 import { useCarga } from "../utils/useCarga";
 import CatalogoPanel from "./panel/CatalogoPanel";

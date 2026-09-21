@@ -1,11 +1,11 @@
 """Destinos, opciones de viaje, lugares, aerolíneas, modelos de avión, productos y servicios."""
 from fastapi import APIRouter, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.dependencias import Administrador, EmpleadoOAdmin, SesionDep
 from app.errores import ConflictoDeNegocio, RecursoNoEncontrado
-from app.models.dominio import Aerolinea, Ciudad, Destino, Excursion, Hotel, ModeloAvion, Pais, Paquete, Producto, Servicio, Vuelo
-from app.schemas.catalogo import AerolineaCreate, CiudadCreate, ModeloAvionCreate, ProductoCreate, ServicioCreate
+from app.models.dominio import Aerolinea, Ciudad, Destino, Excursion, Hotel, ModeloAvion, Pais, Paquete, Producto, Reserva, Servicio, Vuelo
+from app.schemas.catalogo import AerolineaCreate, CiudadCreate, DestinoCreate, ModeloAvionCreate, ProductoCreate, ServicioCreate
 from app.services.catalogos import ahora, normalizar_texto
 from app.services.disponibilidad import plazas_libres
 from app.services.serializadores import (
@@ -105,6 +105,71 @@ async def crear_ciudad(payload: CiudadCreate, admin: Administrador, sesion: Sesi
     await sesion.commit()
     await sesion.refresh(ciudad)
     return ciudad_a_dict(ciudad)
+
+
+# --------------------------------------------------------------------------------------
+# Destinos: las ciudades que la agencia vende
+# --------------------------------------------------------------------------------------
+
+
+@router.get("/api/destinos")
+async def listar_destinos(personal: EmpleadoOAdmin, sesion: SesionDep):
+    """Todos los destinos, también los inactivos (el catálogo público solo muestra los activos con tarifa)."""
+    destinos = (await sesion.scalars(select(Destino))).unique().all()
+    return sorted((destino_a_dict(d) for d in destinos), key=lambda d: normalizar_texto(d["nombre"]))
+
+
+async def _exigir_ciudad_libre(sesion, ciudad_id: int, propio: int | None) -> Ciudad:
+    ciudad = await sesion.get(Ciudad, ciudad_id)
+    if ciudad is None:
+        raise RecursoNoEncontrado("una ciudad", ciudad_id)
+    otro = await sesion.scalar(select(Destino.id).where(Destino.ciudad_id == ciudad_id))
+    if otro is not None and otro != propio:
+        raise ConflictoDeNegocio(f"{ciudad.nombre_completo} ya es un destino: modifica el que existe.")
+    return ciudad
+
+
+@router.post("/api/destinos", status_code=status.HTTP_201_CREATED)
+async def crear_destino(payload: DestinoCreate, admin: Administrador, sesion: SesionDep):
+    await _exigir_ciudad_libre(sesion, payload.ciudadId, None)
+    destino = Destino(
+        ciudad_id=payload.ciudadId, descripcion=payload.descripcion, precio_base=payload.precioBase,
+        imagen_slug=payload.imagenSlug, activo=payload.activo,
+    )
+    sesion.add(destino)
+    await sesion.commit()
+    await sesion.refresh(destino)
+    return destino_a_dict(destino)
+
+
+@router.put("/api/destinos/{destino_id}")
+async def actualizar_destino(destino_id: int, payload: DestinoCreate, admin: Administrador, sesion: SesionDep):
+    destino = await sesion.get(Destino, destino_id)
+    if destino is None:
+        raise RecursoNoEncontrado("un destino", destino_id)
+    await _exigir_ciudad_libre(sesion, payload.ciudadId, destino.id)
+    if destino.ciudad_id != payload.ciudadId:
+        en_uso = await sesion.scalar(select(func.count(Paquete.id)).where(Paquete.destino_id == destino.id)) or await sesion.scalar(
+            select(func.count(Reserva.id)).where(Reserva.destino_id == destino.id)
+        )
+        if en_uso:
+            raise ConflictoDeNegocio("El destino ya tiene paquetes o reservas: no se puede cambiar de ciudad.")
+    destino.ciudad_id, destino.descripcion, destino.precio_base = payload.ciudadId, payload.descripcion, payload.precioBase
+    destino.imagen_slug, destino.activo = payload.imagenSlug, payload.activo
+    await sesion.commit()
+    await sesion.refresh(destino)
+    return destino_a_dict(destino)
+
+
+@router.delete("/api/destinos/{destino_id}")
+async def desactivar_destino(destino_id: int, admin: Administrador, sesion: SesionDep):
+    """Deja de ofrecerse a los clientes. Sus reservas y paquetes existentes no se tocan."""
+    destino = await sesion.get(Destino, destino_id)
+    if destino is None:
+        raise RecursoNoEncontrado("un destino", destino_id)
+    destino.activo = False
+    await sesion.commit()
+    return {"mensaje": "Destino desactivado."}
 
 
 @router.get("/api/aerolineas")

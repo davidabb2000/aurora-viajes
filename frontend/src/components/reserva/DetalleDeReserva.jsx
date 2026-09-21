@@ -1,4 +1,5 @@
 import { etiquetaEstado, fecha, fechaHora, moneda, ubicacion } from "../../utils/formato";
+import PasajerosDeLaReserva from "./PasajerosDeLaReserva";
 import { ETIQUETA_MONO } from "./estilos";
 
 const METODOS = { stripe: "Tarjeta en línea (Stripe)", efectivo: "Efectivo en mostrador", transferencia: "Transferencia", tarjeta: "Datáfono" };
@@ -36,9 +37,10 @@ function Vuelo({ etiqueta, vuelo }) {
 
 /**
  * Todo lo de una reserva en un solo bloque: viaje, vuelos, alojamiento, excursiones con su cantidad y precio,
- * desglose del total y datos del pago. Lo usan la cuenta del cliente y el panel del personal.
+ * desglose del total y datos del pago. Lo usan la cuenta del cliente y el panel del personal. Con `alCambiar`
+ * (recargar la lista) también se pueden completar los datos de los pasajeros.
  */
-function DetalleDeReserva({ reserva, conCliente = false }) {
+function DetalleDeReserva({ reserva, conCliente = false, alCambiar }) {
   const desglose = reserva.desglose || {};
   const esPaquete = Boolean(reserva.paqueteId);
   return (
@@ -97,6 +99,8 @@ function DetalleDeReserva({ reserva, conCliente = false }) {
           <p className="mt-3 text-texto-suave">Sin excursiones.</p>
         )}
       </section>
+
+      <PasajerosDeLaReserva reserva={reserva} alCambiar={alCambiar} />
 
       <section className="rounded-2xl border border-primario/12 bg-white/60 p-4 lg:col-span-2">
         <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">

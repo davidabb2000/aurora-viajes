@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   actualizarUsuarioSesion,
   cerrarSesion as cerrarSesionAlmacenamiento,
@@ -7,8 +7,7 @@ import {
   reemplazarSesion,
   solicitar,
 } from "../utils/api";
-
-const AuthContext = createContext(null);
+import { ContextoDeSesion } from "./useAuth";
 
 /**
  * Provee la sesión (token + usuario) a toda la app mediante Context,
@@ -64,11 +63,5 @@ export function AuthProvider({ children }) {
     [sesion, iniciarSesion, renovarSesion, cerrarSesion, cerrarTodasLasSesiones, actualizarUsuario],
   );
 
-  return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const contexto = useContext(AuthContext);
-  if (!contexto) throw new Error("useAuth debe usarse dentro de <AuthProvider>.");
-  return contexto;
+  return <ContextoDeSesion.Provider value={valor}>{children}</ContextoDeSesion.Provider>;
 }

@@ -6,7 +6,7 @@ import Input from "../components/Input";
 import Button from "../components/Button";
 import { LONGITUD_MAXIMA_CONTRASENA, validarConfirmacionContrasena, validarContrasena, validarRequerido } from "../utils/validaciones";
 import { solicitar } from "../utils/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { inicioDeRol } from "../utils/rutas";
 
 /**

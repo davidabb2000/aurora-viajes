@@ -8,6 +8,7 @@ import marrakech from "../assets/images/marrakech.svg";
 import reikiavik from "../assets/images/reikiavik.svg";
 import nuevaYork from "../assets/images/nueva-york.svg";
 import cairo from "../assets/images/cairo.svg";
+import generico from "../assets/images/destino-generico.svg";
 
 const destinos = [
   {
@@ -81,5 +82,8 @@ const destinos = [
       "Las pirámides de Giza y el Nilo milenario te acercan a una de las civilizaciones más fascinantes de la historia.",
   },
 ];
+
+/** Ilustración de los destinos que se agregan desde el panel y no tienen una propia. */
+export const ilustracionGenerica = generico;
 
 export default destinos;

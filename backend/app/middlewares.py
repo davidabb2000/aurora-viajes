@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.core.configuracion import configuracion
+from app.core.estado_arranque import estado_de_arranque
 
 
 logger = logging.getLogger("aurora-viajes.peticiones")
@@ -60,4 +61,25 @@ async def limitar_tamano_del_cuerpo(peticion: Request, call_next):
             status_code=413,
             content={"codigo": "cuerpo_demasiado_grande", "mensaje": "La petición es demasiado grande.", "ruta": peticion.url.path, "detalles": None},
         )
+    return await call_next(peticion)
+
+
+# Lo que sigue respondiendo aunque la base no esté: la comprobación de salud de la plataforma y la portada de la API.
+RUTAS_SIN_BASE = {"/", "/salud", "/api/health"}
+
+
+async def exigir_base_lista(peticion: Request, call_next):
+    """Mientras la base no responda, todo lo que la necesite contesta 503 en lugar de fallar con un error interno."""
+    if estado_de_arranque.esperando_base and peticion.method != "OPTIONS" and peticion.url.path not in RUTAS_SIN_BASE:
+        respuesta = JSONResponse(
+            status_code=503,
+            content={
+                "codigo": "servicio_no_disponible",
+                "mensaje": "El servicio no está disponible en este momento. Inténtalo de nuevo en unos minutos.",
+                "ruta": peticion.url.path,
+                "detalles": None,
+            },
+        )
+        respuesta.headers["Retry-After"] = "30"
+        return respuesta
     return await call_next(peticion)

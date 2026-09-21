@@ -40,6 +40,12 @@ class Configuracion(BaseSettings):
     bd_sin_pool: bool = False
     mysql_ssl: bool = False
     mysql_ssl_ca: str | None = None
+    # El mismo certificado de CA, pero con su contenido en lugar de una ruta: en plataformas como Railway no hay
+    # dónde dejar un archivo, y una variable de entorno sí admite el texto (también con «\n» escritos a mano).
+    mysql_ssl_ca_pem: str | None = None
+    # Con CA se comprueba que el certificado lo firme esa CA (VERIFY_CA). Comprobar además que el nombre del
+    # servidor coincida (VERIFY_IDENTITY) falla en servicios cuyo certificado no lleva el nombre del host.
+    mysql_ssl_verificar_host: bool = False
     argumentos_conexion: dict = {}
 
     secret_key: str
@@ -75,6 +81,11 @@ class Configuracion(BaseSettings):
     smtp_password: str | None = None
     smtp_from: str = "noreply@auroraviajes.com"
     smtp_use_tls: bool = True
+    # Envío por la API HTTPS de SendGrid. Railway bloquea el SMTP saliente en los planes que no son Pro, y por HTTPS
+    # los correos salen igual. Si hay clave, se usa esta vía en lugar de SMTP; el remitente (SMTP_FROM) debe estar
+    # verificado en SendGrid.
+    sendgrid_api_key: str | None = None
+    sendgrid_api_url: str = "https://api.sendgrid.com/v3/mail/send"
 
     @field_validator("origenes_permitidos", mode="before")
     @classmethod
@@ -100,6 +111,12 @@ class Configuracion(BaseSettings):
             if origen:
                 limpios.append(origen)
         return limpios
+
+    @field_validator("sendgrid_api_key", mode="before")
+    @classmethod
+    def normalizar_clave_sendgrid(cls, value):
+        texto = str(value).strip() if value is not None else ""
+        return texto or None
 
     @field_validator("proveedor_ia_api_key", mode="before")
     @classmethod
@@ -175,14 +192,28 @@ class Configuracion(BaseSettings):
             self.url_base_datos = f"sqlite+aiosqlite:///{self.sqlite_path}"
 
         if self.url_base_datos.startswith("mysql+") and self.mysql_ssl:
-            contexto = ssl.create_default_context(cafile=self.mysql_ssl_ca or None)
-            if self.mysql_ssl_ca is None:
-                # Sin CA propia se cifra igual, pero no se verifica el certificado:
-                # los hosts gestionados suelen usar una CA privada.
-                contexto.check_hostname = False
-                contexto.verify_mode = ssl.CERT_NONE
-            self.argumentos_conexion = {"ssl": contexto}
+            self.argumentos_conexion = {"ssl": self._contexto_tls()}
         return self
+
+    def _contexto_tls(self) -> ssl.SSLContext:
+        """Contexto TLS de la conexión a la base: con CA propia se verifica el certificado; sin ella solo se cifra."""
+        if self.mysql_ssl_ca_pem and self.mysql_ssl_ca_pem.strip():
+            # Las variables de entorno suelen traer el PEM en una línea, con «\n» escritos a mano y a veces entrecomillado.
+            pem = self.mysql_ssl_ca_pem.strip().strip('"').strip("'").replace("\\n", "\n")
+            try:
+                contexto = ssl.create_default_context(cadata=pem)
+            except ssl.SSLError as error:
+                raise ValueError("MYSQL_SSL_CA_PEM no contiene un certificado PEM válido (debe empezar por -----BEGIN CERTIFICATE-----).") from error
+        elif self.mysql_ssl_ca:
+            contexto = ssl.create_default_context(cafile=self.mysql_ssl_ca)
+        else:
+            # Sin CA se cifra igual, pero no se verifica el certificado: los hosts gestionados usan una CA privada.
+            contexto = ssl.create_default_context()
+            contexto.check_hostname = False
+            contexto.verify_mode = ssl.CERT_NONE
+            return contexto
+        contexto.check_hostname = self.mysql_ssl_verificar_host
+        return contexto
 
 
 configuracion = Configuracion()

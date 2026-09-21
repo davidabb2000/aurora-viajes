@@ -37,6 +37,15 @@ export function validarDocumento(valor) {
   return "";
 }
 
+/** Documento de un pasajero: 5 a 20 letras o números (un pasaporte puede llevar letras, a diferencia del de una cuenta). */
+export function validarDocumentoDePasajero(valor) {
+  const limpio = valor.trim();
+  if (!limpio) return "Este campo es obligatorio.";
+  if (!/^[A-Za-z0-9]+$/.test(limpio)) return "Solo letras y números, sin espacios ni guiones.";
+  if (limpio.length < 5 || limpio.length > 20) return "Debe tener entre 5 y 20 caracteres.";
+  return "";
+}
+
 export function validarTelefono(valor) {
   if (!valor.trim()) return "Este campo es obligatorio.";
   if (!REGEX_TELEFONO.test(valor)) return "Ingresa un teléfono válido (7 a 10 dígitos).";

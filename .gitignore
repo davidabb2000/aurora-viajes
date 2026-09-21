@@ -29,9 +29,9 @@ npm-debug.log*
 .pytest_cache/
 .coverage
 
-# Instalador suelto (no pertenece al repo)
-frontend/src/assets/images/Postman (x64).exe
-backend/biblioapi.db
+# Bases SQLite locales de desarrollo
+backend/aurora_dev.db
+backend/aurora_viajes.db
 
 # Estado local de wrangler (Cloudflare)
 .wrangler/

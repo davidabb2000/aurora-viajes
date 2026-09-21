@@ -17,7 +17,7 @@ import {
   validarTipoDocumento,
 } from "../utils/validaciones";
 import { solicitar } from "../utils/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 const TIPOS_DOCUMENTO = [
   { value: "CC", label: "Cédula de ciudadanía" },

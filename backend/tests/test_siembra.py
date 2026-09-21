@@ -4,13 +4,8 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
-
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.exc import OperationalError
 
 RAIZ = Path(__file__).resolve().parent.parent
 
@@ -148,19 +143,3 @@ def test_una_sqlite_de_una_version_anterior_pide_recrearse():
         )
     assert resultado.returncode != 0
     assert "versión anterior" in resultado.stderr
-
-
-@pytest.mark.parametrize("fallo", [OSError("Name or service not known"), OperationalError("SELECT 1", {}, Exception("caída"))])
-def test_si_la_base_no_responde_el_arranque_lo_explica_y_falla(monkeypatch, caplog, fallo):
-    """Sin base de datos la app no arranca, pero el log dice por qué en lugar de dejar solo un 502 en la plataforma."""
-    from app.main import app
-
-    async def caida():
-        raise fallo
-
-    monkeypatch.setattr("app.main.asegurar_base_inicial", caida)
-    with caplog.at_level(logging.CRITICAL, logger="aurora-viajes"):
-        with pytest.raises(type(fallo)):
-            with TestClient(app):
-                pass
-    assert "No se pudo conectar con la base de datos" in caplog.text and "DATABASE_URL" in caplog.text

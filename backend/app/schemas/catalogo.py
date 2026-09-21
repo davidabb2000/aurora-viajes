@@ -42,6 +42,22 @@ class CiudadCreate(BaseModel):
         return limpio
 
 
+class DestinoCreate(BaseModel):
+    """Una ciudad que se vende como destino. `precioBase` es la tarifa aérea por pasajero: con 0 no se ofrece a los clientes."""
+
+    ciudadId: int = Field(..., ge=1)
+    descripcion: str | None = Field(default=None, max_length=2000)
+    precioBase: float = Field(..., gt=0, le=1_000_000_000)
+    # Nombre de la ilustración de la portada (por ejemplo «paris»). Sin ella se usa una genérica.
+    imagenSlug: str | None = Field(default=None, max_length=80, pattern=r"^[a-z0-9-]+$")
+    activo: bool = True
+
+    @field_validator("descripcion")
+    @classmethod
+    def limpiar_descripcion(cls, value: str | None) -> str | None:
+        return limpiar_texto(value)
+
+
 class AerolineaCreate(BaseModel):
     codigo: str = Field(..., min_length=2, max_length=4, pattern=r"^[A-Za-z0-9]+$")
     nombre: str = Field(..., min_length=2, max_length=80)

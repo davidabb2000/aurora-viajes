@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import Input from "../components/Input";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { solicitar } from "../utils/api";
 
 function formatearMoneda(valor) {

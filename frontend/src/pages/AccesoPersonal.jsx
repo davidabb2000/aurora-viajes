@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import AuthShell from "../components/auth/AuthShell";
 import { validarCorreo, validarRequerido } from "../utils/validaciones";
 import { solicitar } from "../utils/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 const CAMPO =
   "w-full rounded-xl border border-white/20 bg-white/10 px-3.5 py-2.5 text-[0.95rem] text-white outline-none backdrop-blur-sm transition placeholder:text-white/40 focus:border-oro focus:bg-white/15 focus:ring-3 focus:ring-oro/25";

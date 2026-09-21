@@ -22,6 +22,18 @@ export class ErrorApi extends Error {
   }
 }
 
+const SERVICIO_NO_DISPONIBLE = "El servicio no está disponible en este momento. Inténtalo de nuevo en unos minutos.";
+const SIN_INTERNET = "No tienes conexión a internet. Revisa tu red e inténtalo de nuevo.";
+
+/**
+ * Cuando el servidor está caído la plataforma responde con un 502 sin cabeceras CORS, y el navegador lo cuenta como un
+ * fallo de red: por eso solo se culpa a la conexión de quien navega si de verdad no tiene internet.
+ */
+function errorDeRed() {
+  const sinInternet = typeof navigator !== "undefined" && navigator.onLine === false;
+  return new ErrorApi(sinInternet ? SIN_INTERNET : SERVICIO_NO_DISPONIBLE, { codigo: sinInternet ? "sin_conexion" : "servicio_no_disponible" });
+}
+
 const enRutaDeAcceso = () => RUTAS_DE_ACCESO.includes(window.location.pathname);
 
 export async function solicitar(ruta, opciones = {}) {
@@ -39,7 +51,7 @@ export async function solicitar(ruta, opciones = {}) {
       },
     });
   } catch {
-    throw new ErrorApi("No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.", { codigo: "sin_conexion" });
+    throw errorDeRed();
   }
   const datos = await respuesta.json().catch(() => ({}));
   const mensaje = (typeof datos.mensaje === "string" && datos.mensaje) || (typeof datos.detail === "string" && datos.detail) || "";
@@ -55,9 +67,10 @@ export async function solicitar(ruta, opciones = {}) {
     window.location.assign("/cambiar-contrasena");
   }
   if (!respuesta.ok) {
-    throw new ErrorApi(mensaje || "Ocurrió un error en la solicitud.", {
+    const caido = [502, 503, 504].includes(respuesta.status);
+    throw new ErrorApi(caido ? mensaje || SERVICIO_NO_DISPONIBLE : mensaje || "Ocurrió un error en la solicitud.", {
       estado: respuesta.status,
-      codigo: datos.codigo || "",
+      codigo: datos.codigo || (caido ? "servicio_no_disponible" : ""),
       detalles: Array.isArray(datos.detalles) ? datos.detalles : null,
     });
   }
@@ -71,9 +84,9 @@ export async function descargarArchivo(ruta, nombreDeArchivo) {
   try {
     respuesta = await fetch(`${API_URL}${ruta}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   } catch {
-    throw new ErrorApi("No se pudo conectar con el servidor.", { codigo: "sin_conexion" });
+    throw errorDeRed();
   }
-  if (!respuesta.ok) throw new ErrorApi("No se pudo descargar el archivo.", { estado: respuesta.status });
+  if (!respuesta.ok) throw new ErrorApi([502, 503, 504].includes(respuesta.status) ? SERVICIO_NO_DISPONIBLE : "No se pudo descargar el archivo.", { estado: respuesta.status });
   const archivo = await respuesta.blob();
   const enlace = document.createElement("a");
   enlace.href = URL.createObjectURL(archivo);

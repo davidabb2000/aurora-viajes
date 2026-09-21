@@ -4,6 +4,8 @@ Aquí solo se ensambla la aplicación: ciclo de vida, middlewares, formato de
 errores y routers. La lógica vive en `routers/`, `services/` y `schemas/`.
 """
 
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -11,10 +13,12 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import IntegrityError
 
 from app.core.base_datos import motor
+from app.core import estado_arranque as arranque
 from app.core.configuracion import configuracion
+from app.core.estado_arranque import es_error_de_conexion, estado_de_arranque
 from app.errores import (
     ConflictoDeNegocio,
     DemasiadasPeticiones,
@@ -24,30 +28,64 @@ from app.errores import (
     RecursoNoEncontrado,
     ServicioNoDisponible,
 )
-from app.middlewares import cabeceras_de_seguridad, limitar_tamano_del_cuerpo, registrar_peticion
-from app.routers import auth, catalogo, clientes, comercial, contacto, pagos, recomendaciones, reservas, usuarios, viajes
+from app.middlewares import cabeceras_de_seguridad, exigir_base_lista, limitar_tamano_del_cuerpo, registrar_peticion
+from app.routers import auth, catalogo, clientes, comercial, contacto, pagos, pasajeros, recomendaciones, reservas, usuarios, viajes
 from app.services.siembra import asegurar_base_inicial
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 logger = logging.getLogger("aurora-viajes")
 
 
+async def _reintentar_preparacion_de_la_base() -> None:
+    """Vuelve a preparar la base, con espera creciente, hasta que responda. Los fallos que no son de conexión no se reintentan."""
+    espera = arranque.ESPERA_INICIAL
+    while True:
+        await asyncio.sleep(espera)
+        estado_de_arranque.intentos += 1
+        try:
+            await asegurar_base_inicial()
+        except Exception as error:  # noqa: BLE001 - se clasifica justo debajo
+            if es_error_de_conexion(error):
+                estado_de_arranque.ultimo_error = type(error).__name__
+                logger.warning("La base de datos sigue sin responder (intento %s: %s). Reintento en %.0f s.", estado_de_arranque.intentos, type(error).__name__, min(espera * 2, arranque.ESPERA_MAXIMA))
+                espera = min(espera * 2, arranque.ESPERA_MAXIMA)
+                continue
+            logger.critical("La preparación de la base falló y no se reintentará; la API seguirá respondiendo 503.", exc_info=True)
+            estado_de_arranque.fallo_definitivo = True
+            return
+        estado_de_arranque.esperando_base = False
+        estado_de_arranque.ultimo_error = ""
+        logger.info("La base de datos ya responde: la API está lista.")
+        return
+
+
 @asynccontextmanager
 async def ciclo_de_vida(app: FastAPI):
     if len(configuracion.secret_key) < 32:
         logger.warning("SECRET_KEY tiene menos de 32 caracteres: genera una más larga (python -c \"import secrets; print(secrets.token_urlsafe(48))\").")
+    reintentos = None
     try:
         await asegurar_base_inicial()
-    except (OSError, DBAPIError) as error:
-        # Sin base de datos la app no puede servir nada: se cae, pero dejando dicho por qué (si no, en la plataforma
-        # solo se ve un 502 y una traza larga).
+    except Exception as error:
+        if not es_error_de_conexion(error):
+            # Un fallo de la migración o de los datos no se arregla esperando: se cae, y la plataforma conserva la versión anterior.
+            logger.critical("No se pudo preparar la base de datos.", exc_info=True)
+            raise
+        # Sin base la API no puede servir nada, pero se levanta igual: contesta 503 con un mensaje claro y se recupera
+        # sola cuando la base vuelva (antes se caía, y la plataforma solo enseñaba un 502 sin explicación).
+        estado_de_arranque.esperando_base = True
+        estado_de_arranque.ultimo_error = type(error).__name__
         logger.critical(
-            "No se pudo conectar con la base de datos (%s). Si es un servicio gestionado (Aiven, Clever Cloud...), "
-            "comprueba que esté encendido y que DATABASE_URL sea la correcta.",
+            "No se pudo conectar con la base de datos (%s). La API responde 503 y reintenta sola. Si es un servicio gestionado "
+            "(Aiven, Clever Cloud...), comprueba que esté encendido y que DATABASE_URL sea la correcta.",
             type(error).__name__,
         )
-        raise
+        reintentos = asyncio.create_task(_reintentar_preparacion_de_la_base())
     yield
+    if reintentos is not None:
+        reintentos.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reintentos
     await motor.dispose()
 
 
@@ -63,6 +101,7 @@ app = FastAPI(
 )
 # El último que se añade es el más externo: primero se registra, luego se ponen las cabeceras y por
 # último se rechazan los cuerpos enormes (así también la respuesta 413 lleva cabeceras de seguridad).
+app.middleware("http")(exigir_base_lista)
 app.middleware("http")(limitar_tamano_del_cuerpo)
 app.middleware("http")(cabeceras_de_seguridad)
 app.middleware("http")(registrar_peticion)
@@ -75,7 +114,7 @@ app.add_middleware(
     expose_headers=["X-Peticion-Id", "X-Tiempo-Respuesta-ms"],
 )
 
-for modulo in (recomendaciones, comercial, auth, usuarios, clientes, catalogo, viajes, reservas, pagos, contacto):
+for modulo in (recomendaciones, comercial, auth, usuarios, clientes, catalogo, viajes, reservas, pasajeros, pagos, contacto):
     app.include_router(modulo.router)
 
 
@@ -192,4 +231,5 @@ def raiz():
 @app.get("/salud")
 @app.get("/api/health")
 def salud():
-    return {"estado": "ok"}
+    """La API está viva. `baseDeDatos` dice si ya puede atender consultas (lista) o si aún espera a la base (sin conexion)."""
+    return {"estado": "ok", "baseDeDatos": estado_de_arranque.descripcion}

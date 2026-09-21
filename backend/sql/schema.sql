@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS detalle_facturas;
 DROP TABLE IF EXISTS facturas;
 DROP TABLE IF EXISTS detalle_ventas;
 DROP TABLE IF EXISTS ventas;
+DROP TABLE IF EXISTS reserva_pasajeros;
 DROP TABLE IF EXISTS reserva_excursiones;
 DROP TABLE IF EXISTS reservas;
 DROP TABLE IF EXISTS paquete_excursiones;
@@ -33,6 +34,7 @@ DROP TABLE IF EXISTS metodos_pago;
 DROP TABLE IF EXISTS mensajes_contacto;
 DROP TABLE IF EXISTS estados_reserva;
 DROP TABLE IF EXISTS estados_pago;
+DROP TABLE IF EXISTS esquema_version;
 DROP TABLE IF EXISTS aerolineas;
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -43,6 +45,12 @@ CREATE TABLE aerolineas (
 	PRIMARY KEY (id), 
 	UNIQUE (codigo), 
 	UNIQUE (nombre)
+);
+
+CREATE TABLE esquema_version (
+	version INTEGER NOT NULL, 
+	aplicada_en DATETIME NOT NULL, 
+	PRIMARY KEY (version)
 );
 
 CREATE TABLE estados_pago (
@@ -376,6 +384,20 @@ CREATE TABLE reserva_excursiones (
 	FOREIGN KEY(reserva_id) REFERENCES reservas (id) ON DELETE CASCADE, 
 	FOREIGN KEY(excursion_id) REFERENCES excursiones (id)
 );
+
+CREATE TABLE reserva_pasajeros (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	reserva_id INTEGER NOT NULL, 
+	nombre VARCHAR(40) NOT NULL, 
+	apellido VARCHAR(40) NOT NULL, 
+	tipo_documento_id INTEGER NOT NULL, 
+	numero_documento VARCHAR(20) NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_pasajero_reserva_documento UNIQUE (reserva_id, tipo_documento_id, numero_documento), 
+	FOREIGN KEY(reserva_id) REFERENCES reservas (id) ON DELETE CASCADE, 
+	FOREIGN KEY(tipo_documento_id) REFERENCES tipos_documento (id)
+);
+CREATE INDEX ix_reserva_pasajeros_reserva_id ON reserva_pasajeros (reserva_id);
 
 CREATE TABLE ventas (
 	id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, 

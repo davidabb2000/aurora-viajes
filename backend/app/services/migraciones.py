@@ -37,6 +37,9 @@ PAIS_DE_CIUDADES_CONOCIDAS = {
 }
 PAIS_SIN_ESPECIFICAR = "Sin especificar"
 
+# Sube al cambiar lo que la migración hace: las bases que estén en una versión menor la repiten.
+VERSION_DEL_ESQUEMA = 2
+
 TABLAS_A_RESPALDAR = ("destinos", "hoteles", "excursiones", "vuelos", "paquetes", "reservas", "reserva_excursiones")
 
 
@@ -140,6 +143,15 @@ async def _contar_nulos(sesion: AsyncSession, tabla: str, columna: str) -> int:
     return int(await sesion.scalar(text(f"SELECT COUNT(*) FROM {_q(tabla)} WHERE {_q(columna)} IS NULL")) or 0)
 
 
+def _marcar_incompleta(sesion: AsyncSession) -> None:
+    """Anota que algo quedó sin aplicar: no se pondrá la marca de versión y el próximo arranque lo reintentará."""
+    sesion.info["migracion_incompleta"] = True
+
+
+async def _version_aplicada(sesion: AsyncSession) -> int:
+    return int(await sesion.scalar(text("SELECT COALESCE(MAX(version), 0) FROM esquema_version")) or 0)
+
+
 async def _ejecutar(sesion: AsyncSession, sql: str, parametros: dict | None = None) -> None:
     await sesion.execute(text(sql), parametros or {})
 
@@ -155,6 +167,7 @@ async def _intentar(sesion: AsyncSession, descripcion: str, sql: str) -> bool:
         return True
     except Exception:  # noqa: BLE001 - una restricción que no se puede añadir no debe impedir el arranque
         await sesion.rollback()
+        _marcar_incompleta(sesion)
         logger.warning("No se pudo aplicar «%s»; revisa los datos existentes.", descripcion, exc_info=True)
         return False
 
@@ -199,6 +212,7 @@ async def _exigir_no_nula(sesion: AsyncSession, tabla: str, columna: str) -> boo
         return True
     if await _contar_nulos(sesion, tabla, columna):
         logger.error("Migración: %s.%s tiene filas sin valor; se deja anulable.", tabla, columna)
+        _marcar_incompleta(sesion)
         return False
     tipo = await _tipo_columna(sesion, tabla, columna)
     await _ejecutar(sesion, f"ALTER TABLE {_q(tabla)} MODIFY {_q(columna)} {tipo} NOT NULL")
@@ -589,6 +603,11 @@ async def migrar_esquema(sesion: AsyncSession) -> None:
     """Lleva una base MySQL antigua al esquema actual. En SQLite no hace nada: allí la base se crea de cero."""
     if not _es_mysql(sesion):
         return
+    if await _version_aplicada(sesion) >= VERSION_DEL_ESQUEMA:
+        return
+    sesion.info.pop("migracion_incompleta", None)
     await _migrar_a_v1(sesion)
     await _migrar_a_v2(sesion)
+    if not sesion.info.get("migracion_incompleta"):
+        await _ejecutar(sesion, "INSERT IGNORE INTO esquema_version (version, aplicada_en) VALUES (:v, NOW())", {"v": VERSION_DEL_ESQUEMA})
     await sesion.commit()

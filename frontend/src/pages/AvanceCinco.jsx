@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { solicitar } from "../utils/api";
+import { useCarga } from "../utils/useCarga";
 
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 const dinero = (valor) => `$${Number(valor || 0).toLocaleString("es-CO")}`;
@@ -215,12 +216,10 @@ function TablaRanking({ titulo, subtitulo, filas, columnas, vacio }) {
 
 export default function AvanceCinco() {
   const { sesion } = useAuth();
-  const [parametros] = useSearchParams();
-  const [pestana, setPestana] = useState(parametros.get("vista") || "resumen");
-  const [datos, setDatos] = useState(null);
-  const [ventas, setVentas] = useState([]);
-  const [facturas, setFacturas] = useState([]);
-  const [pqr, setPqr] = useState([]);
+  const [parametros, setParametros] = useSearchParams();
+  // La pestaña sale de la dirección (`?vista=`): la barra lateral y las pestañas cambian lo mismo, y no hay que sincronizar nada.
+  const vistaPedida = parametros.get("vista");
+  const pestana = PESTANAS.includes(vistaPedida) ? vistaPedida : "resumen";
   const [filtros, setFiltros] = useState({ desde: "", hasta: "", periodo: "mes", estado: "" });
   const [formPqr, setFormPqr] = useState({ tipo: "peticion", asunto: "", descripcion: "" });
   const [pregunta, setPregunta] = useState("");
@@ -230,32 +229,25 @@ export default function AvanceCinco() {
   const esPersonal = rol === "administrador" || rol === "empleado";
   const headers = { Authorization: `Bearer ${sesion?.token}` };
 
-  const cargar = async () => {
-    const parametros = new URLSearchParams(Object.entries(filtros).filter(([, valor]) => valor));
-    try {
-      const [resumen, historial, listadoFacturas, solicitudes] = await Promise.all([
-        esPersonal ? solicitar(`/estadisticas?${parametros}`, { headers }) : Promise.resolve(null),
-        solicitar(`/ventas?${parametros}`, { headers }),
-        solicitar("/facturas", { headers }),
-        solicitar("/pqr", { headers }),
-      ]);
-      setDatos(resumen); setVentas(historial); setFacturas(listadoFacturas); setPqr(solicitudes);
-    } catch (error) { setMensaje(error.message); }
-  };
+  const consulta = new URLSearchParams(Object.entries(filtros).filter(([, valor]) => valor)).toString();
+  const resumen = useCarga(sesion && esPersonal ? `/estadisticas?${consulta}` : "");
+  const historial = useCarga(sesion ? `/ventas?${consulta}` : "");
+  const listadoDeFacturas = useCarga(sesion ? "/facturas" : "");
+  const solicitudes = useCarga(sesion ? "/pqr" : "");
+  const datos = resumen.datos;
+  const ventas = historial.datos ?? [];
+  const facturas = listadoDeFacturas.datos ?? [];
+  const pqr = solicitudes.datos ?? [];
+  const avisoDeCarga = resumen.error || historial.error || listadoDeFacturas.error || solicitudes.error;
 
-  useEffect(() => { if (sesion) cargar(); }, [sesion, filtros]);
-  useEffect(() => {
-    const vistaSolicitada = parametros.get("vista");
-    if (vistaSolicitada && PESTANAS.includes(vistaSolicitada)) setPestana(vistaSolicitada);
-  }, [parametros]);
   if (!sesion) return <Navigate to="/login" replace />;
 
   const registrarPqr = async (evento) => {
     evento.preventDefault();
-    try { const creada = await solicitar("/pqr", { method: "POST", headers, body: JSON.stringify(formPqr) }); setPqr((actuales) => [creada, ...actuales]); setFormPqr({ tipo: "peticion", asunto: "", descripcion: "" }); setMensaje("PQR registrada correctamente."); } catch (error) { setMensaje(error.message); }
+    try { await solicitar("/pqr", { method: "POST", headers, body: JSON.stringify(formPqr) }); solicitudes.recargar(); setFormPqr({ tipo: "peticion", asunto: "", descripcion: "" }); setMensaje("PQR registrada correctamente."); } catch (error) { setMensaje(error.message); }
   };
   const actualizarPqr = async (item, estado) => {
-    try { await solicitar(`/pqr/${item.id}`, { method: "PATCH", headers, body: JSON.stringify({ estado, respuesta: item.respuesta || null }) }); setPqr((actuales) => actuales.map((actual) => actual.id === item.id ? { ...actual, estado } : actual)); } catch (error) { setMensaje(error.message); }
+    try { await solicitar(`/pqr/${item.id}`, { method: "PATCH", headers, body: JSON.stringify({ estado, respuesta: item.respuesta || null }) }); solicitudes.recargar(); } catch (error) { setMensaje(error.message); }
   };
   const preguntar = async (evento) => {
     evento.preventDefault();
@@ -273,7 +265,7 @@ export default function AvanceCinco() {
       <span className="rounded-full border border-primario/12 bg-white/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-texto-suave backdrop-blur-sm">Rol: {rol}</span>
     </section>
 
-    {mensaje && <p className="vidrio mt-5 rounded-2xl p-4 text-sm text-texto">{mensaje}</p>}
+    {(mensaje || avisoDeCarga) && <p role="alert" className="vidrio mt-5 rounded-2xl p-4 text-sm text-texto">{mensaje || avisoDeCarga}</p>}
 
     {/* Navegación por pestañas, también accesible sin la barra lateral. */}
     <div className="vidrio-sutil mt-6 flex flex-wrap gap-1.5 rounded-2xl p-1.5" role="tablist" aria-label="Secciones comerciales">
@@ -283,7 +275,7 @@ export default function AvanceCinco() {
           type="button"
           role="tab"
           aria-selected={pestana === vista}
-          onClick={() => setPestana(vista)}
+          onClick={() => setParametros({ vista }, { replace: true })}
           className={`rounded-xl px-4 py-2 text-sm font-semibold capitalize transition ${
             pestana === vista
               ? "boton-tinta text-white"

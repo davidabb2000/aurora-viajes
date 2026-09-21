@@ -5,10 +5,11 @@ crea solo si falta. Antes cada arranque volvía a poner el precio, la descripci�
 «activo» de los destinos, deshaciendo las ediciones.
 """
 import logging
-from datetime import datetime, time, timedelta
+from collections import defaultdict
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.base_datos import Base, FabricaDeSesiones, motor
@@ -17,7 +18,7 @@ from app.core.politica_contrasena import CONTRASENAS_COMUNES
 from app.core.seguridad import hashear_contrasena, verificar_contrasena
 from app.models.dominio import (
     Aerolinea, Ciudad, Destino, EstadoPago, EstadoReserva, Excursion, Hotel, MetodoPago, ModeloAvion, Pais, Paquete,
-    Permiso, Role, TipoDocumento, User, Vuelo,
+    Permiso, Role, TipoDocumento, User, Vuelo, rol_permisos,
 )
 from app.services.catalogos import ahora, normalizar_texto
 from app.services.migraciones import migrar_esquema
@@ -162,17 +163,31 @@ async def _rechazar_sqlite_antigua(conexion) -> None:
         )
 
 
-async def asegurar_base_inicial() -> None:
+async def _crear_tablas_si_faltan() -> None:
+    """`create_all` pregunta por cada tabla si existe (decenas de consultas); con una sola se ve si falta alguna."""
     async with motor.begin() as conexion:
         if conexion.dialect.name == "sqlite":
             await _rechazar_sqlite_antigua(conexion)
-        await conexion.run_sync(Base.metadata.create_all)
+        existentes = await conexion.run_sync(lambda c: set(inspect(c).get_table_names()))
+        if not set(Base.metadata.tables) <= existentes:
+            await conexion.run_sync(Base.metadata.create_all)
+
+
+async def asegurar_base_inicial() -> None:
+    """Deja la base lista: esquema, migración de bases antiguas y datos de ejemplo.
+
+    Cada reinicio repite esto, y con una base remota cada consulta cuesta una ida y vuelta por la red (decenas de
+    milisegundos): por eso los catálogos se leen enteros de una vez y se comparan en memoria, en lugar de preguntar
+    por cada hotel, vuelo o permiso. Un arranque sin cambios hace una treintena de consultas.
+    """
+    await _crear_tablas_si_faltan()
     async with FabricaDeSesiones() as sesion:
         await _sembrar_catalogos_base(sesion)
         await migrar_esquema(sesion)  # solo MySQL; necesita que los catálogos anteriores ya existan
-        await _sembrar_destinos_y_alojamientos(sesion)
-        await _asegurar_programacion_de_vuelos(sesion)
-        await _asegurar_paquetes(sesion)
+        lugares = await _Lugares.cargar(sesion)
+        catalogo = await _sembrar_destinos_y_alojamientos(sesion, lugares)
+        vuelos = await _asegurar_programacion_de_vuelos(sesion, lugares)
+        await _asegurar_paquetes(sesion, lugares, catalogo, vuelos)
         await _asegurar_roles_y_permisos(sesion)
         await _asegurar_administrador(sesion)
         await sesion.commit()
@@ -187,38 +202,53 @@ async def _sembrar_catalogos_base(sesion: AsyncSession) -> None:
     """Tablas de referencia que la migración y el resto del arranque necesitan."""
     for modelo, filas in ((TipoDocumento, TIPOS_DOCUMENTO_SEMILLA), (EstadoReserva, ESTADOS_RESERVA_SEMILLA),
                           (EstadoPago, ESTADOS_PAGO_SEMILLA), (MetodoPago, METODOS_PAGO_SEMILLA)):
+        existentes = set((await sesion.scalars(select(modelo.codigo))).all())
         for codigo, nombre in filas:
-            if await sesion.scalar(select(modelo.id).where(modelo.codigo == codigo)) is None:
+            if codigo not in existentes:
                 sesion.add(modelo(codigo=codigo, nombre=nombre))
+    aerolineas = set((await sesion.scalars(select(Aerolinea.nombre))).all())
     for codigo, nombre in AEROLINEAS_SEMILLA:
-        if await sesion.scalar(select(Aerolinea.id).where(Aerolinea.nombre == nombre)) is None:
+        if nombre not in aerolineas:
             sesion.add(Aerolinea(codigo=codigo, nombre=nombre))
+    modelos = set((await sesion.scalars(select(ModeloAvion.nombre))).all())
     for nombre, capacidad in MODELOS_AVION_SEMILLA:
-        if await sesion.scalar(select(ModeloAvion.id).where(ModeloAvion.nombre == nombre)) is None:
+        if nombre not in modelos:
             sesion.add(ModeloAvion(nombre=nombre, capacidad=capacidad))
     await sesion.commit()
 
 
-async def _pais(sesion: AsyncSession, nombre: str) -> Pais:
-    pais = await sesion.scalar(select(Pais).where(Pais.nombre == nombre))
-    if pais is None:
-        pais = Pais(nombre=nombre)
-        sesion.add(pais)
+class _Lugares:
+    """Países y ciudades en memoria: se leen una vez y se crean los que falten."""
+
+    def __init__(self, paises: dict[str, Pais], ciudades: dict[int, list[Ciudad]]):
+        self.paises = paises
+        self.ciudades = ciudades
+
+    @classmethod
+    async def cargar(cls, sesion: AsyncSession) -> "_Lugares":
+        paises = {pais.nombre: pais for pais in (await sesion.scalars(select(Pais))).unique().all()}
+        ciudades: dict[int, list[Ciudad]] = defaultdict(list)
+        for ciudad in (await sesion.scalars(select(Ciudad))).unique().all():
+            ciudades[ciudad.pais_id].append(ciudad)
+        return cls(paises, ciudades)
+
+    async def ciudad(self, sesion: AsyncSession, pais: str, nombre: str) -> Ciudad:
+        """La ciudad de ese país; se busca sin distinguir tildes por si una migración la creó con otra grafía."""
+        fila_pais = self.paises.get(pais)
+        if fila_pais is None:
+            fila_pais = Pais(nombre=pais)
+            sesion.add(fila_pais)
+            await sesion.flush()
+            self.paises[pais] = fila_pais
+        buscada = normalizar_texto(nombre)
+        for ciudad in self.ciudades[fila_pais.id]:
+            if normalizar_texto(ciudad.nombre) == buscada:
+                return ciudad
+        ciudad = Ciudad(pais_id=fila_pais.id, nombre=nombre)
+        sesion.add(ciudad)
         await sesion.flush()
-    return pais
-
-
-async def _ciudad(sesion: AsyncSession, pais: str, nombre: str) -> Ciudad:
-    """La ciudad de ese país; se busca sin distinguir tildes por si una migración la creó con otra grafía."""
-    pais_fila = await _pais(sesion, pais)
-    ciudades = (await sesion.scalars(select(Ciudad).where(Ciudad.pais_id == pais_fila.id))).unique().all()
-    for ciudad in ciudades:
-        if normalizar_texto(ciudad.nombre) == normalizar_texto(nombre):
-            return ciudad
-    ciudad = Ciudad(pais_id=pais_fila.id, nombre=nombre)
-    sesion.add(ciudad)
-    await sesion.flush()
-    return ciudad
+        self.ciudades[fila_pais.id].append(ciudad)
+        return ciudad
 
 
 # --------------------------------------------------------------------------------------
@@ -226,30 +256,48 @@ async def _ciudad(sesion: AsyncSession, pais: str, nombre: str) -> Ciudad:
 # --------------------------------------------------------------------------------------
 
 
-async def _sembrar_destinos_y_alojamientos(sesion: AsyncSession) -> None:
-    for pais, ciudad in ORIGENES_SEMILLA:
-        await _ciudad(sesion, pais, ciudad)
+class _Catalogo:
+    """Destinos, hoteles y excursiones ya guardados, para comprobar en memoria lo que falta."""
 
+    def __init__(self, destinos: dict[int, Destino], hoteles: dict[tuple[int, str], Hotel], excursiones: dict[tuple[int, str], Excursion]):
+        self.destinos = destinos
+        self.hoteles = hoteles
+        self.excursiones = excursiones
+
+
+async def _sembrar_destinos_y_alojamientos(sesion: AsyncSession, lugares: _Lugares) -> _Catalogo:
+    for pais, ciudad in ORIGENES_SEMILLA:
+        await lugares.ciudad(sesion, pais, ciudad)
+
+    catalogo = _Catalogo(
+        destinos={d.ciudad_id: d for d in (await sesion.scalars(select(Destino))).unique().all()},
+        hoteles={(h.ciudad_id, h.nombre): h for h in (await sesion.scalars(select(Hotel))).unique().all()},
+        excursiones={(e.ciudad_id, e.nombre): e for e in (await sesion.scalars(select(Excursion))).unique().all()},
+    )
     for datos in DESTINOS_SEMILLA:
-        ciudad = await _ciudad(sesion, datos["pais"], datos["ciudad"])
-        if await sesion.scalar(select(Destino.id).where(Destino.ciudad_id == ciudad.id)) is None:
-            sesion.add(Destino(
+        ciudad = await lugares.ciudad(sesion, datos["pais"], datos["ciudad"])
+        if ciudad.id not in catalogo.destinos:
+            catalogo.destinos[ciudad.id] = Destino(
                 ciudad_id=ciudad.id, descripcion=datos["descripcion"], precio_base=datos["precio"],
                 imagen_slug=datos["slug"], activo=True,
-            ))
+            )
+            sesion.add(catalogo.destinos[ciudad.id])
         for nombre, estrellas, precio_noche in datos["hoteles"]:
-            if await sesion.scalar(select(Hotel.id).where(Hotel.ciudad_id == ciudad.id, Hotel.nombre == nombre)) is None:
-                sesion.add(Hotel(
+            if (ciudad.id, nombre) not in catalogo.hoteles:
+                catalogo.hoteles[(ciudad.id, nombre)] = Hotel(
                     nombre=nombre, ciudad_id=ciudad.id, estrellas=estrellas, precio_noche=precio_noche, activo=True,
                     descripcion=f"Alojamiento seleccionado en {datos['ciudad']}, con desayuno, recepción 24 horas y ubicación estratégica para recorrer el destino.",
-                ))
+                )
+                sesion.add(catalogo.hoteles[(ciudad.id, nombre)])
         for nombre, duracion, precio in datos["excursiones"]:
-            if await sesion.scalar(select(Excursion.id).where(Excursion.ciudad_id == ciudad.id, Excursion.nombre == nombre)) is None:
-                sesion.add(Excursion(
+            if (ciudad.id, nombre) not in catalogo.excursiones:
+                catalogo.excursiones[(ciudad.id, nombre)] = Excursion(
                     nombre=nombre, ciudad_id=ciudad.id, duracion_horas=duracion, precio=precio, activo=True,
                     descripcion=f"Experiencia guiada para conocer {datos['ciudad']} con acompañamiento local y tiempo para fotografías.",
-                ))
-        await sesion.flush()
+                )
+                sesion.add(catalogo.excursiones[(ciudad.id, nombre)])
+    await sesion.flush()
+    return catalogo
 
 
 # --------------------------------------------------------------------------------------
@@ -261,19 +309,29 @@ def _numero_de_regreso(numero_ida: str) -> str:
     return numero_ida.replace("AUR3", "AUR4", 1)
 
 
-async def _asegurar_programacion_de_vuelos(sesion: AsyncSession) -> None:
+async def _asegurar_programacion_de_vuelos(sesion: AsyncSession, lugares: _Lugares) -> list[Vuelo]:
     """Mantiene, para cada destino de ejemplo, salidas semanales de ida y su vuelo de regreso.
 
     Solo añade fechas a continuación de la última que ya exista para esa ruta, así que no
-    resucita vuelos que un administrador haya borrado o desactivado.
+    resucita vuelos que un administrador haya borrado o desactivado. Devuelve todos los vuelos de ejemplo
+    (los que ya estaban y los nuevos) para que los paquetes no tengan que volver a consultarlos.
     """
     hoy = ahora().date()
     aerolinea = await sesion.scalar(select(Aerolinea).where(Aerolinea.nombre == "Aurora Airlines"))
     modelos = {m.nombre: m for m in (await sesion.scalars(select(ModeloAvion))).all()}
-    origen = await _ciudad(sesion, *ORIGEN_PRINCIPAL)
+    origen = await lugares.ciudad(sesion, *ORIGEN_PRINCIPAL)
+
+    numeros = [d["vuelo"] for d in DESTINOS_SEMILLA] + [_numero_de_regreso(d["vuelo"]) for d in DESTINOS_SEMILLA]
+    vuelos: list[Vuelo] = list((await sesion.scalars(select(Vuelo).where(Vuelo.numero_vuelo.in_(numeros)))).unique().all())
+    # Salidas ya programadas por ruta de ida, y salidas de regreso por número de vuelo.
+    salidas_de_ida: dict[tuple[str, int, int], list[date]] = defaultdict(list)
+    salidas_de_regreso: set[tuple[str, datetime]] = set()
+    for vuelo in vuelos:
+        salidas_de_ida[(vuelo.numero_vuelo, vuelo.origen_id, vuelo.destino_id)].append(vuelo.fecha_salida.date())
+        salidas_de_regreso.add((vuelo.numero_vuelo, vuelo.fecha_salida))
 
     for indice, datos in enumerate(DESTINOS_SEMILLA):
-        ciudad = await _ciudad(sesion, datos["pais"], datos["ciudad"])
+        ciudad = await lugares.ciudad(sesion, datos["pais"], datos["ciudad"])
         numero_ida, numero_regreso = datos["vuelo"], _numero_de_regreso(datos["vuelo"])
         noches = 6 + indice % 3
         modelo = modelos["Airbus A320" if indice % 2 == 0 else "Boeing 787"]
@@ -281,71 +339,67 @@ async def _asegurar_programacion_de_vuelos(sesion: AsyncSession) -> None:
         duracion = timedelta(hours=9 + indice % 4, minutes=45)
         puerta, terminal = f"{chr(65 + indice % 4)}{10 + indice:02d}", str(1 + indice % 3)
 
-        salidas = [
-            momento.date() for momento in (await sesion.scalars(
-                select(Vuelo.fecha_salida).where(Vuelo.numero_vuelo == numero_ida, Vuelo.origen_id == origen.id, Vuelo.destino_id == ciudad.id)
-            )).all()
-        ]
+        salidas = salidas_de_ida[(numero_ida, origen.id, ciudad.id)]
         fechas = set(salidas)
         siguiente = max(max(salidas) + timedelta(days=DIAS_ENTRE_SALIDAS) if salidas else hoy, hoy + timedelta(days=DIAS_DE_ANTELACION))
         while siguiente <= hoy + timedelta(days=HORIZONTE_DE_VENTA_DIAS):
             salida = datetime.combine(siguiente, time(7 + indice % 5, 30))
-            sesion.add(Vuelo(
+            nuevo = Vuelo(
                 numero_vuelo=numero_ida, aerolinea_id=aerolinea.id, modelo_avion_id=modelo.id, origen_id=origen.id,
                 destino_id=ciudad.id, fecha_salida=salida, fecha_llegada=salida + duracion, capacidad_maxima=capacidad,
                 puerta=puerta, terminal=terminal, estado="programado", activo=True,
-            ))
+            )
+            sesion.add(nuevo)
+            vuelos.append(nuevo)
+            salidas_de_regreso.add((numero_ida, salida))
             fechas.add(siguiente)
             siguiente += timedelta(days=DIAS_ENTRE_SALIDAS)
 
         # Cada salida futura tiene su vuelo de regreso `noches` días después.
         for fecha in sorted(f for f in fechas if f > hoy):
             regreso = datetime.combine(fecha + timedelta(days=noches), time(11 + indice % 4, 0))
-            existe = await sesion.scalar(select(Vuelo.id).where(Vuelo.numero_vuelo == numero_regreso, Vuelo.fecha_salida == regreso))
-            if existe is None:
-                sesion.add(Vuelo(
+            if (numero_regreso, regreso) not in salidas_de_regreso:
+                nuevo = Vuelo(
                     numero_vuelo=numero_regreso, aerolinea_id=aerolinea.id, modelo_avion_id=modelo.id, origen_id=ciudad.id,
                     destino_id=origen.id, fecha_salida=regreso, fecha_llegada=regreso + duracion, capacidad_maxima=capacidad,
                     puerta=puerta, terminal=terminal, estado="programado", activo=True,
-                ))
-        await sesion.flush()
+                )
+                sesion.add(nuevo)
+                vuelos.append(nuevo)
+                salidas_de_regreso.add((numero_regreso, regreso))
+    await sesion.flush()
+    return vuelos
 
 
-async def _asegurar_paquetes(sesion: AsyncSession) -> None:
+async def _asegurar_paquetes(sesion: AsyncSession, lugares: _Lugares, catalogo: _Catalogo, vuelos: list[Vuelo]) -> None:
     """Un paquete de ejemplo por destino, siempre apuntando a la próxima salida disponible."""
     momento = ahora()
-    origen = await _ciudad(sesion, *ORIGEN_PRINCIPAL)
+    origen = await lugares.ciudad(sesion, *ORIGEN_PRINCIPAL)
+    nombres = [f"Aurora {d['ciudad']}: experiencia completa" for d in DESTINOS_SEMILLA]
+    paquetes = {p.nombre: p for p in (await sesion.scalars(select(Paquete).where(Paquete.nombre.in_(nombres)))).unique().all()}
+
     for indice, datos in enumerate(DESTINOS_SEMILLA):
-        ciudad = await _ciudad(sesion, datos["pais"], datos["ciudad"])
-        destino = await sesion.scalar(select(Destino).where(Destino.ciudad_id == ciudad.id))
-        nombre = f"Aurora {datos['ciudad']}: experiencia completa"
+        ciudad = await lugares.ciudad(sesion, datos["pais"], datos["ciudad"])
+        destino = catalogo.destinos[ciudad.id]
+        nombre = nombres[indice]
         noches = 6 + indice % 3
-        paquete = await sesion.scalar(select(Paquete).where(Paquete.nombre == nombre))
+        paquete = paquetes.get(nombre)
 
         # Próxima salida futura de esta ruta con su vuelo de regreso.
-        ida = await sesion.scalar(
-            select(Vuelo)
-            .where(Vuelo.numero_vuelo == datos["vuelo"], Vuelo.origen_id == origen.id, Vuelo.destino_id == ciudad.id,
-                   Vuelo.activo.is_(True), Vuelo.estado == "programado", Vuelo.fecha_salida > momento + timedelta(days=3))
-            .order_by(Vuelo.fecha_salida.asc())
-            .limit(1)
+        ida = min(
+            (v for v in vuelos if v.numero_vuelo == datos["vuelo"] and v.origen_id == origen.id and v.destino_id == ciudad.id
+             and v.activo and v.estado == "programado" and v.fecha_salida > momento + timedelta(days=3)),
+            key=lambda v: v.fecha_salida, default=None,
         )
         if ida is None:
             continue
-        regreso = await sesion.scalar(
-            select(Vuelo).where(
-                Vuelo.numero_vuelo == _numero_de_regreso(datos["vuelo"]),
-                Vuelo.fecha_salida >= datetime.combine(ida.fecha_salida.date() + timedelta(days=noches), time.min),
-                Vuelo.fecha_salida < datetime.combine(ida.fecha_salida.date() + timedelta(days=noches + 1), time.min),
-            )
-        )
+        desde = datetime.combine(ida.fecha_salida.date() + timedelta(days=noches), time.min)
+        hasta = datetime.combine(ida.fecha_salida.date() + timedelta(days=noches + 1), time.min)
+        regreso = next((v for v in vuelos if v.numero_vuelo == _numero_de_regreso(datos["vuelo"]) and desde <= v.fecha_salida < hasta), None)
 
         if paquete is None:
-            hotel = await sesion.scalar(select(Hotel).where(Hotel.ciudad_id == ciudad.id, Hotel.nombre == datos["hoteles"][0][0]))
-            excursiones = [
-                await sesion.scalar(select(Excursion).where(Excursion.ciudad_id == ciudad.id, Excursion.nombre == excursion[0]))
-                for excursion in datos["excursiones"]
-            ]
+            hotel = catalogo.hoteles.get((ciudad.id, datos["hoteles"][0][0]))
+            excursiones = [catalogo.excursiones.get((ciudad.id, excursion[0])) for excursion in datos["excursiones"]]
             sesion.add(Paquete(
                 nombre=nombre, destino_id=destino.id, vuelo_id=ida.id, vuelo_regreso_id=regreso.id if regreso else None,
                 hotel_id=hotel.id, noches=noches,
@@ -358,7 +412,7 @@ async def _asegurar_paquetes(sesion: AsyncSession) -> None:
             paquete.vuelo_regreso_id = regreso.id if regreso else None
         elif paquete.activo and paquete.vuelo_regreso_id is None and regreso is not None and paquete.vuelo_id == ida.id:
             paquete.vuelo_regreso_id = regreso.id  # completa los paquetes anteriores al vuelo de regreso
-        await sesion.flush()
+    await sesion.flush()
 
 
 # --------------------------------------------------------------------------------------
@@ -368,29 +422,27 @@ async def _asegurar_paquetes(sesion: AsyncSession) -> None:
 
 async def _asegurar_roles_y_permisos(sesion: AsyncSession) -> None:
     clausula = _clausula_no_duplicados(sesion)
-    roles: dict[str, Role] = {}
+    roles = {rol.nombre: rol for rol in (await sesion.scalars(select(Role))).unique().all()}
     for nombre in PERMISOS_POR_ROL:
-        rol = await sesion.scalar(select(Role).where(Role.nombre == nombre))
-        if rol is None:
-            rol = Role(nombre=nombre)
-            sesion.add(rol)
-            await sesion.flush()
-        roles[nombre] = rol
-    permisos: dict[str, Permiso] = {}
+        if nombre not in roles:
+            roles[nombre] = Role(nombre=nombre)
+            sesion.add(roles[nombre])
+    permisos = {permiso.nombre: permiso for permiso in (await sesion.scalars(select(Permiso))).unique().all()}
     for lista in PERMISOS_POR_ROL.values():
         for nombre in lista:
-            permiso = await sesion.scalar(select(Permiso).where(Permiso.nombre == nombre))
-            if permiso is None:
-                permiso = Permiso(nombre=nombre)
-                sesion.add(permiso)
-                await sesion.flush()
-            permisos[nombre] = permiso
+            if nombre not in permisos:
+                permisos[nombre] = Permiso(nombre=nombre)
+                sesion.add(permisos[nombre])
+    await sesion.flush()
+    asignados = {(rol_id, permiso_id) for rol_id, permiso_id in (await sesion.execute(select(rol_permisos.c.rol_id, rol_permisos.c.permiso_id))).all()}
     for rol_nombre, lista in PERMISOS_POR_ROL.items():
         for permiso_nombre in lista:
-            await sesion.execute(
-                text(f"{clausula} INTO rol_permisos (rol_id, permiso_id) VALUES (:rol_id, :permiso_id)"),
-                {"rol_id": roles[rol_nombre].id, "permiso_id": permisos[permiso_nombre].id},
-            )
+            par = (roles[rol_nombre].id, permisos[permiso_nombre].id)
+            if par not in asignados:
+                await sesion.execute(
+                    text(f"{clausula} INTO rol_permisos (rol_id, permiso_id) VALUES (:rol_id, :permiso_id)"),
+                    {"rol_id": par[0], "permiso_id": par[1]},
+                )
 
 
 async def _asegurar_administrador(sesion: AsyncSession) -> None:
@@ -433,4 +485,3 @@ async def _asegurar_administrador(sesion: AsyncSession) -> None:
         if es_conocida:
             admin.debe_cambiar_contrasena = True
             logger.warning("El administrador sigue con la clave de ejemplo: se le obligará a cambiarla en su próximo acceso.")
-

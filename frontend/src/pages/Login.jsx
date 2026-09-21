@@ -5,7 +5,7 @@ import Input from "../components/Input";
 import Button from "../components/Button";
 import { validarCorreo, validarRequerido } from "../utils/validaciones";
 import { solicitar } from "../utils/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 /**
  * Inicio de sesión de clientes. Al entrar, `SoloInvitados` (en App.jsx) lleva a la página de donde

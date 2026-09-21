@@ -348,6 +348,10 @@ async def actualizar_reserva_existente(
     if reserva.estado_rel.codigo == "cancelada":
         raise ConflictoDeNegocio("Una reserva cancelada no se puede modificar. Reactívala primero.")
     plan = await preparar_reserva(sesion, datos, reserva_actual=reserva)
+    if plan.pasajeros < len(reserva.datos_pasajeros):
+        raise ConflictoDeNegocio(
+            f"La reserva tiene datos de {len(reserva.datos_pasajeros)} pasajeros: quita los que sobran antes de reducirla a {plan.pasajeros}."
+        )
     precio_cambia = plan.total != Decimal(str(reserva.monto_total or 0)).quantize(CENTAVOS)
     if reserva.estado_pago_rel.codigo == "pagado" and precio_cambia:
         raise ConflictoDeNegocio("La reserva ya está pagada y no se puede cambiar su precio. Cancélala y crea una nueva.")

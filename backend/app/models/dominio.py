@@ -63,6 +63,19 @@ paquete_excursiones = Table(
 )
 
 
+class VersionEsquema(Base):
+    """Versiones de esquema que la migración de bases antiguas ya aplicó por completo.
+
+    Con la marca puesta, los arranques siguientes se saltan las comprobaciones de la migración (un centenar de
+    consultas al catálogo del servidor, que con una base remota tardan segundos). Sin marca, se repiten.
+    """
+
+    __tablename__ = "esquema_version"
+
+    version: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    aplicada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora, nullable=False)
+
+
 class Role(Base):
     __tablename__ = "roles"
 
@@ -385,6 +398,26 @@ class ReservaExcursion(Base):
     excursion: Mapped[Excursion] = relationship(lazy="joined")
 
 
+class PasajeroDeReserva(Base):
+    """Una persona que viaja en una reserva, con lo que la aerolínea pide para emitir su pasaje.
+
+    Es opcional y se completa cuando se tiene (la reserva solo sabe cuántos pasajeros son): sirve para el manifiesto
+    de cada vuelo. Una misma persona no puede figurar dos veces en la misma reserva.
+    """
+
+    __tablename__ = "reserva_pasajeros"
+    __table_args__ = (UniqueConstraint("reserva_id", "tipo_documento_id", "numero_documento", name="uq_pasajero_reserva_documento"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reserva_id: Mapped[int] = mapped_column(ForeignKey("reservas.id", ondelete="CASCADE"), nullable=False, index=True)
+    nombre: Mapped[str] = mapped_column(String(40), nullable=False)
+    apellido: Mapped[str] = mapped_column(String(40), nullable=False)
+    tipo_documento_id: Mapped[int] = mapped_column(ForeignKey("tipos_documento.id"), nullable=False)
+    numero_documento: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    tipo_documento: Mapped[TipoDocumento] = relationship(lazy="joined")
+
+
 class Reserva(Base):
     __tablename__ = "reservas"
     __table_args__ = (
@@ -441,6 +474,9 @@ class Reserva(Base):
     hotel_rel: Mapped[Hotel | None] = relationship(lazy="joined")
     lineas_excursion: Mapped[list[ReservaExcursion]] = relationship(
         cascade="all, delete-orphan", lazy="selectin", order_by="ReservaExcursion.excursion_id"
+    )
+    datos_pasajeros: Mapped[list[PasajeroDeReserva]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="PasajeroDeReserva.id"
     )
     estado_rel: Mapped[EstadoReserva] = relationship(back_populates="reservas", lazy="joined")
     estado_pago_rel: Mapped[EstadoPago] = relationship(back_populates="reservas", lazy="joined")

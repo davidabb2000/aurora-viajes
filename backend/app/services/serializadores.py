@@ -1,5 +1,5 @@
 """Conversión de modelos a los diccionarios JSON que consume el frontend."""
-from app.models.dominio import Ciudad, Destino, Excursion, Hotel, Paquete, Producto, Reserva, Servicio, User, Vuelo
+from app.models.dominio import Ciudad, Destino, Excursion, Hotel, Paquete, PasajeroDeReserva, Producto, Reserva, Servicio, User, Vuelo
 
 
 def usuario_a_dict(usuario: User) -> dict:
@@ -170,6 +170,16 @@ def paquete_a_dict(paquete: Paquete, plazas: dict[int, int] | None = None) -> di
     return datos
 
 
+def pasajero_a_dict(pasajero: PasajeroDeReserva) -> dict:
+    return {
+        "id": pasajero.id,
+        "nombre": pasajero.nombre,
+        "apellido": pasajero.apellido,
+        "tipoDocumento": pasajero.tipo_documento.codigo,
+        "numeroDocumento": pasajero.numero_documento,
+    }
+
+
 def _nombre(usuario: User | None) -> str | None:
     return f"{usuario.nombre} {usuario.apellido}" if usuario is not None else None
 
@@ -224,6 +234,8 @@ def reserva_a_dict(reserva: Reserva) -> dict:
         "pasajeros": reserva.pasajeros,
         "telefonoContacto": reserva.telefono_contacto,
         "notas": reserva.notas,
+        "datosDePasajeros": [pasajero_a_dict(pasajero) for pasajero in reserva.datos_pasajeros],
+        "pasajerosRegistrados": len(reserva.datos_pasajeros),
         "estado": reserva.estado_rel.codigo,
         "estadoPago": reserva.estado_pago_rel.codigo,
         "metodoPago": reserva.metodo_pago_rel.codigo if reserva.metodo_pago_rel else None,

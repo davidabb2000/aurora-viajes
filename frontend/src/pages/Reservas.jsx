@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import AsistenteDeReserva from "../components/reserva/AsistenteDeReserva";
 import MisReservas from "../components/reserva/MisReservas";
 import { solicitar } from "../utils/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { esPersonal } from "../utils/rutas";
 
 /**

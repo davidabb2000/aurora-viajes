@@ -61,7 +61,7 @@ function MisReservas({ reservas, alCambiar }) {
                 </summary>
 
                 <div className="p-5 sm:p-6">
-                  <DetalleDeReserva reserva={reserva} />
+                  <DetalleDeReserva reserva={reserva} alCambiar={alCambiar} />
 
                   {!cancelada && (
                     <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-primario/12 pt-4">
