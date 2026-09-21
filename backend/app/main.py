@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.core.base_datos import motor
 from app.core.configuracion import configuracion
@@ -36,7 +36,17 @@ logger = logging.getLogger("aurora-viajes")
 async def ciclo_de_vida(app: FastAPI):
     if len(configuracion.secret_key) < 32:
         logger.warning("SECRET_KEY tiene menos de 32 caracteres: genera una más larga (python -c \"import secrets; print(secrets.token_urlsafe(48))\").")
-    await asegurar_base_inicial()
+    try:
+        await asegurar_base_inicial()
+    except (OSError, DBAPIError) as error:
+        # Sin base de datos la app no puede servir nada: se cae, pero dejando dicho por qué (si no, en la plataforma
+        # solo se ve un 502 y una traza larga).
+        logger.critical(
+            "No se pudo conectar con la base de datos (%s). Si es un servicio gestionado (Aiven, Clever Cloud...), "
+            "comprueba que esté encendido y que DATABASE_URL sea la correcta.",
+            type(error).__name__,
+        )
+        raise
     yield
     await motor.dispose()
 

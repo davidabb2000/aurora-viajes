@@ -475,13 +475,14 @@ async def _copiar_datos_v2(sesion: AsyncSession) -> None:
         "WHERE monto_vuelo = 0 AND monto_hotel = 0 AND monto_excursiones = 0 AND monto_total > 0",
     )
     # Antes, una reserva de paquete no guardaba el hotel ni las excursiones que el paquete incluía: se completan con
-    # las del paquete (sin cobro aparte), para que se vean igual que las reservas nuevas. Es repetible sin duplicar.
+    # las del paquete (sin cobro aparte), para que se vean igual que las reservas nuevas. Es repetible sin duplicar:
+    # la clave primaria (reserva, excursión) descarta lo que ya está, y así la sentencia no consulta su propia tabla
+    # en una subconsulta, cosa que MySQL no admite.
     await _ejecutar(sesion, "UPDATE reservas r JOIN paquetes p ON p.id = r.paquete_id SET r.hotel_id = p.hotel_id WHERE r.hotel_id IS NULL")
     await _ejecutar(
         sesion,
-        "INSERT INTO reserva_excursiones (reserva_id, excursion_id, cantidad, precio_unitario) "
-        "SELECT r.id, pe.excursion_id, r.pasajeros, 0 FROM reservas r JOIN paquete_excursiones pe ON pe.paquete_id = r.paquete_id "
-        "WHERE NOT EXISTS (SELECT 1 FROM reserva_excursiones re WHERE re.reserva_id = r.id AND re.excursion_id = pe.excursion_id)",
+        "INSERT IGNORE INTO reserva_excursiones (reserva_id, excursion_id, cantidad, precio_unitario) "
+        "SELECT r.id, pe.excursion_id, r.pasajeros, 0 FROM reservas r JOIN paquete_excursiones pe ON pe.paquete_id = r.paquete_id",
     )
     # Las excursiones que ya tenía cada reserva conservan el precio de hoy como precio de venta;
     # en un paquete van incluidas, sin cobro aparte.
