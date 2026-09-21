@@ -1,7 +1,6 @@
 import { useState } from "react";
 import Input from "../components/Input";
 import Button from "../components/Button";
-import GoogleMap from "../components/GoogleMap";
 import { validarRequerido, validarCorreo } from "../utils/validaciones";
 import { solicitar } from "../utils/api";
 
@@ -129,7 +128,6 @@ function Contacto() {
                 </li>
               </ul>
             </div>
-            <GoogleMap />
           </aside>
         </div>
       </div>

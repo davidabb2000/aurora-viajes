@@ -191,6 +191,15 @@ h3 {
     box-shadow: 0 0 0 3px rgba(255, 218, 63, 0.28);
   }
 
+  /* Pista que se desplaza sin barra: el carrusel de destinos trae sus propios botones y puntos. */
+  .sin-barra {
+    scrollbar-width: none;
+  }
+
+  .sin-barra::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Botones: siempre en pildora. El !important es a proposito: el marcado
      antiguo los combina con rounded-xl y text-white sueltos. */
   .boton-tinta {

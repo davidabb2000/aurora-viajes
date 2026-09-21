@@ -1,5 +1,8 @@
 import { Link } from "react-router-dom";
+import GoogleMap from "./GoogleMap";
 import Revelar from "./Revelar";
+
+const ENLACE_DEL_MAPA = "https://www.google.com/maps/search/?api=1&query=Medell%C3%ADn%2C%20Colombia";
 
 function Footer() {
   const anioActual = new Date().getFullYear();
@@ -80,7 +83,23 @@ function Footer() {
           </div>
         </div>
 
-        <p className="mt-14 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-texto-suave">
+        <Revelar className="mt-16">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+            <p className="antetitulo">Nuestra oficina · Medellín, Colombia</p>
+            <a
+              href={ENLACE_DEL_MAPA}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-primario no-underline transition hover:text-acento"
+            >
+              Abrir en Google Maps ↗
+            </a>
+          </div>
+          <GoogleMap className="h-72 sm:h-96" />
+        </Revelar>
+
+        {/* El margen derecho deja libre el botón flotante de WhatsApp en pantallas estrechas. */}
+        <p className="mt-12 pr-20 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-texto-suave sm:pr-0">
           © {anioActual} Aurora Viajes · Hecho en Medellín, Colombia
         </p>
       </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import destinosBase, { ilustracionGenerica } from "../data/destinos";
 import { solicitar } from "../utils/api";
-import DestinosGrid from "../components/DestinosGrid";
+import CarruselDeDestinos from "../components/CarruselDeDestinos";
 import Sponsors from "../components/Sponsors";
 import Revelar from "../components/Revelar";
 import TextoRevelado from "../components/TextoRevelado";
@@ -16,11 +16,15 @@ const HISTORIA = [
 
 const CIERRE = [{ texto: "Un buen viaje se planea con calma, se paga con seguridad y se recuerda toda la vida.", negrita: true }];
 
+// Los destinos salen del catálogo y el administrador puede sumar o retirar alguno: el título cuenta los que hay.
+const CANTIDADES = ["Cero", "Un", "Dos", "Tres", "Cuatro", "Cinco", "Seis", "Siete", "Ocho", "Nueve", "Diez", "Once", "Doce"];
+const lugaresPara = (cantidad) => `${CANTIDADES[cantidad] ?? cantidad} ${cantidad === 1 ? "lugar" : "lugares"} para`;
+
 const PASOS = [
   {
     numero: "01",
     titulo: "Elige tu destino",
-    texto: "Diez ciudades con vuelo asignado y tarifa por pasajero. Si dudas, pídele una recomendación a nuestro asistente.",
+    texto: "Ciudades con vuelo asignado y tarifa por pasajero. Si dudas, pídele una recomendación a nuestro asistente.",
     etiqueta: "Vuelo incluido",
     giro: "md:-rotate-2",
   },
@@ -133,14 +137,16 @@ function Index() {
             <div>
               <p className="antetitulo">Destinos</p>
               <h2 id="destinos-titulo" className="mt-4 max-w-[14ch] text-[clamp(2.6rem,6vw,4.6rem)] leading-[1.03] tracking-[-0.03em]">
-                Diez lugares para <em className="titulo-enfasis">empezar</em>
+                {lugaresPara(destinos.length)} <em className="titulo-enfasis">empezar</em>
               </h2>
             </div>
             <p className="max-w-[38ch] leading-relaxed text-texto-suave">
               Elige uno y arma tu viaje: un paquete listo o a la carta, con precio por pasajero desde el primer paso.
             </p>
           </Revelar>
-          <DestinosGrid items={destinos} />
+          <Revelar>
+            <CarruselDeDestinos items={destinos} />
+          </Revelar>
         </div>
       </section>
 
