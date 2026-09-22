@@ -66,6 +66,19 @@ def test_solo_los_fallos_de_conexion_se_consideran_pasajeros(error, esperado):
     assert es_error_de_conexion(error) is esperado
 
 
+def test_el_detalle_del_error_cuenta_lo_que_dijo_el_controlador_y_no_la_consulta():
+    del_controlador = Exception(2003, "Can't connect to MySQL server on 'db.ejemplo'")
+    del_controlador.__cause__ = socket.gaierror(-2, "Name or service not known")
+    envuelto = OperationalError("SELECT secreto FROM tabla WHERE clave = %s", {"clave": "hunter2"}, del_controlador)
+
+    detalle = estado_arranque.detalle_del_error(envuelto)
+    assert "2003" in detalle and "Can't connect to MySQL server on 'db.ejemplo'" in detalle
+    assert "Name or service not known" in detalle
+    assert "SELECT" not in detalle and "hunter2" not in detalle
+    assert estado_arranque.detalle_del_error(ValueError("dato inválido")) == "ValueError('dato inválido',)"
+    assert len(estado_arranque.detalle_del_error(OSError("x" * 2000))) <= 400
+
+
 def test_sin_base_la_api_se_levanta_y_contesta_503(monkeypatch, caplog):
     async def caida():
         raise socket.gaierror(-2, "Name or service not known")

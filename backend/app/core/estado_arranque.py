@@ -37,6 +37,22 @@ class EstadoDeArranque:
 estado_de_arranque = EstadoDeArranque()
 
 
+def detalle_del_error(error: BaseException) -> str:
+    """Lo que dijo de verdad el controlador (código y mensaje de MySQL) y el fallo de red que hay debajo, para el log.
+
+    `OperationalError` a secas no distingue un nombre que no resuelve de una clave mala o de un certificado rechazado.
+    Solo se cuenta el error del controlador (`orig`) y su cadena de causas, nunca el texto de SQLAlchemy, que lleva la
+    consulta y sus parámetros; los mensajes de MySQL y del sistema nombran el servidor y el usuario, no la contraseña.
+    """
+    actual = getattr(error, "orig", None) or error
+    partes = []
+    while actual is not None and len(partes) < 4:
+        argumentos = getattr(actual, "args", ())
+        partes.append(f"{type(actual).__name__}{tuple(argumentos)!r}" if argumentos else type(actual).__name__)
+        actual = actual.__cause__ or actual.__context__
+    return " <- ".join(partes)[:400]
+
+
 def es_error_de_conexion(error: BaseException) -> bool:
     """¿El fallo es de conectividad (y por tanto pasajero) y no un error del código o de los datos?"""
     if isinstance(error, OSError):

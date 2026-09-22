@@ -6,7 +6,7 @@ Agencia de viajes en línea. El cliente reserva un **paquete cerrado** o arma su
 |---|---|---|
 | `frontend/` | React 19, Vite, Tailwind 4, React Router | Cloudflare |
 | `backend/` | FastAPI, SQLAlchemy async, Pydantic | Railway (Docker) |
-| Base de datos | MySQL | Aiven (plan gratuito) |
+| Base de datos | MySQL | Railway (servicio MySQL del mismo proyecto) |
 
 Guías: **[DESPLIEGUE.md](DESPLIEGUE.md)** (producción, variables, Stripe, costes) y **[INTEGRACION_FULL_STACK.md](INTEGRACION_FULL_STACK.md)** (cómo se conectan las piezas).
 
@@ -156,7 +156,7 @@ Todas van en `backend/.env` en local y en las variables del servicio en Railway.
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Administrador inicial, que se crea una sola vez. Con la clave de ejemplo (`Admin123!`) obliga a cambiarla al entrar. |
 | `MIGRACION_AUTOMATICA` | Con `false`, una base que ya tiene datos y necesita migrarse no se migra sola (la API espera con 503 y `/api/health` dice `migracion pendiente`): sirve para hacer una copia de seguridad antes de la primera migración. Por defecto `true`. |
 | `ADMIN_RESTABLECER_CONTRASENA` | En `true`, el siguiente arranque vuelve a fijar la clave del administrador a `ADMIN_PASSWORD` (para recuperar el acceso). |
-| `DATABASE_URL` o `MYSQL_*` | Conexión a la base (una URL de Aiven activa TLS sola). `MOTOR_BD=sqlite` para desarrollo sin MySQL. |
+| `DATABASE_URL` o `MYSQL_*` | Conexión a la base. En Railway, la referencia `${{MySQL.MYSQL_URL}}` (red privada, sin copiar contraseñas); la URL de un proveedor externo con `ssl-mode` activa TLS sola. `MOTOR_BD=sqlite` para desarrollo sin MySQL. |
 | `ORIGENES_PERMITIDOS`, `FRONTEND_URL` | CORS y enlaces de retorno de Stripe y de los correos. |
 | `PROXIES_DE_CONFIANZA` | Proxies delante de la app (Railway = 1; con 0 se ignora `X-Forwarded-For`). |
 | `DEPURACION` | `true` publica `/docs` y registra cada consulta SQL. Solo para desarrollo. |

@@ -4,7 +4,7 @@ Cómo se conectan las piezas de Aurora Viajes. Para arrancar el proyecto y ver e
 
 ```
 React + Vite ──fetch──▶ FastAPI ──Pydantic──▶ servicios ──SQLAlchemy──▶ MySQL
-   (Cloudflare)          (Railway)                                       (Aiven)
+   (Cloudflare)          (Railway)                                     (Railway)
 ```
 
 ## Frontend

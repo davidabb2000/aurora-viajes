@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.base_datos import motor
 from app.core import estado_arranque as arranque
 from app.core.configuracion import configuracion
-from app.core.estado_arranque import es_error_de_conexion, estado_de_arranque
+from app.core.estado_arranque import detalle_del_error, es_error_de_conexion, estado_de_arranque
 from app.errores import (
     ConflictoDeNegocio,
     DemasiadasPeticiones,
@@ -52,7 +52,7 @@ async def _reintentar_preparacion_de_la_base() -> None:
         except Exception as error:  # noqa: BLE001 - se clasifica justo debajo
             if es_error_de_conexion(error):
                 estado_de_arranque.ultimo_error = type(error).__name__
-                logger.warning("La base de datos sigue sin responder (intento %s: %s). Reintento en %.0f s.", estado_de_arranque.intentos, type(error).__name__, min(espera * 2, arranque.ESPERA_MAXIMA))
+                logger.warning("La base de datos sigue sin responder (intento %s: %s). Reintento en %.0f s.", estado_de_arranque.intentos, detalle_del_error(error), min(espera * 2, arranque.ESPERA_MAXIMA))
                 espera = min(espera * 2, arranque.ESPERA_MAXIMA)
                 continue
             logger.critical("La preparación de la base falló y no se reintentará; la API seguirá respondiendo 503.", exc_info=True)
@@ -87,9 +87,9 @@ async def ciclo_de_vida(app: FastAPI):
         estado_de_arranque.esperando_base = True
         estado_de_arranque.ultimo_error = type(error).__name__
         logger.critical(
-            "No se pudo conectar con la base de datos (%s). La API responde 503 y reintenta sola. Si es un servicio gestionado "
-            "(Aiven, Clever Cloud...), comprueba que esté encendido y que DATABASE_URL sea la correcta.",
-            type(error).__name__,
+            "No se pudo conectar con la base de datos: %s. La API responde 503 y reintenta sola. Comprueba que el servicio de la "
+            "base esté encendido y que DATABASE_URL sea la correcta (en Railway, la referencia ${{MySQL.MYSQL_URL}}).",
+            detalle_del_error(error),
         )
         reintentos = asyncio.create_task(_reintentar_preparacion_de_la_base())
     yield

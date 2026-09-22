@@ -4,7 +4,7 @@ Cada pieza vive en su plataforma:
 
 | Pieza | Plataforma | Notas |
 |---|---|---|
-| Base de datos | **Aiven** (MySQL, plan gratuito) | 1 GB, sin caducidad ni tarjeta. Se apaga tras una inactividad prolongada y avisa antes. |
+| Base de datos | **Railway** (servicio MySQL del mismo proyecto que el backend) | Siempre encendida y con volumen propio; se factura por consumo. Se habla con ella por la red privada del proyecto, sin abrirla a internet. |
 | Backend | **Railway** (Docker, Root Directory `backend`) | Escucha el puerto de `PORT` y expone `/api/health`. |
 | Frontend | **Cloudflare** (assets estáticos, `frontend/wrangler.jsonc`) | Gratis. `VITE_API_URL` se incrusta al compilar. |
 
@@ -12,11 +12,29 @@ Orden: **base → backend → frontend**, y al final se vuelve al backend para c
 
 ---
 
-## 1. Base de datos (Aiven)
+## 1. Base de datos (MySQL en Railway)
 
-Crea un servicio MySQL gratuito y copia su URI (`mysql://usuario:clave@host:puerto/base?ssl-mode=REQUIRED`). Es lo único que necesitas: el backend crea las tablas y carga los datos iniciales (destinos, vuelos, hoteles, excursiones, paquetes, roles y el administrador) al arrancar. No hay que importar ningún `.sql`.
+En el mismo proyecto de Railway que el backend: **New → Database → Add MySQL** (con el CLI: `railway add --database mysql --service MySQL`). El servicio se llama `MySQL` y trae un volumen, así que los datos sobreviven a los reinicios y a los despliegues.
 
-`DATABASE_URL` puede llevar la URI tal cual: el backend cambia el esquema a `mysql+aiomysql://`, fuerza `charset=utf8mb4` y activa TLS al ver `ssl-mode`. Sin certificado de CA propio la conexión va cifrada pero **no se verifica el certificado**. Para verificarlo, descarga el certificado de CA del servicio (en Aiven: **Overview → CA certificate**) y pega su contenido, tal cual, en la variable `MYSQL_SSL_CA_PEM` del backend (Railway admite varias líneas; también sirve en una sola línea con `\n` escritos a mano). Con eso se comprueba que el certificado del servidor lo firme esa CA (`VERIFY_CA`, lo que recomienda Aiven). Si prefieres un archivo, `MYSQL_SSL_CA` acepta una ruta. Si además quieres exigir que coincida el nombre del servidor, pon `MYSQL_SSL_VERIFICAR_HOST=true`. Un PEM mal pegado impide arrancar con un mensaje claro.
+En el servicio del backend, define `DATABASE_URL` como una **referencia** a esa base, no como una URL copiada:
+
+```
+DATABASE_URL=${{MySQL.MYSQL_URL}}
+```
+
+Railway la sustituye por la dirección interna (`mysql.railway.internal`), el usuario y la contraseña: no hay credenciales que copiar ni que se queden viejas, y la conexión va por la red privada del proyecto, sin TLS y sin abrir la base a internet. Es lo único que necesitas: el backend crea las tablas y carga los datos iniciales (destinos, vuelos, hoteles, excursiones, paquetes, roles y el administrador) al arrancar. No hay que importar ningún `.sql`. El código está probado contra MySQL 9.4 (la versión que instala Railway), además de MariaDB 10.4 y SQLite.
+
+**Verla desde tu máquina.** Desde fuera de Railway la base no es alcanzable, a propósito. Para una copia o una consulta puntual abre un proxy TCP temporal y ciérralo al terminar:
+
+```bash
+railway tcp-proxy create --port 3306 --service MySQL      # devuelve el dominio y el puerto públicos
+mysqldump --ssl-mode=REQUIRED -h DOMINIO -P PUERTO -u root -p railway > respaldo.sql
+railway tcp-proxy delete ID_DEL_PROXY --yes
+```
+
+La contraseña es `MYSQL_ROOT_PASSWORD`, en las variables del servicio MySQL (panel de Railway).
+
+**Otra base gestionada (Aiven, Clever Cloud...).** `DATABASE_URL` también acepta la URI de un proveedor externo tal cual (`mysql://usuario:clave@host:puerto/base?ssl-mode=REQUIRED`): el backend cambia el esquema a `mysql+aiomysql://`, fuerza `charset=utf8mb4` y activa TLS al ver `ssl-mode`. Sin certificado de CA propio la conexión va cifrada pero **no se verifica el certificado**. Para verificarlo, descarga el certificado de CA del servicio (en Aiven: **Overview → CA certificate**) y pega su contenido, tal cual, en la variable `MYSQL_SSL_CA_PEM` del backend (Railway admite varias líneas; también sirve en una sola línea con `\n` escritos a mano). Con eso se comprueba que el certificado del servidor lo firme esa CA (`VERIFY_CA`, lo que recomienda Aiven). Si prefieres un archivo, `MYSQL_SSL_CA` acepta una ruta. Si además quieres exigir que coincida el nombre del servidor, pon `MYSQL_SSL_VERIFICAR_HOST=true`. Un PEM mal pegado impide arrancar con un mensaje claro.
 
 **Migraciones.** Las tablas ya existentes no las modifica `create_all`, así que el backend, al arrancar, detecta el esquema anterior y lo migra al normalizado (3FN) con `services/migraciones.py`:
 
@@ -44,7 +62,7 @@ Cuando compruebes que todo funciona, las tablas `respaldo_v2_*` se pueden borrar
 Variables:
 
 ```
-DATABASE_URL=<URI de Aiven>
+DATABASE_URL=${{MySQL.MYSQL_URL}}
 MOTOR_BD=mysql
 SECRET_KEY=<clave-larga-y-aleatoria>
 ADMIN_EMAIL=admin@auroraviajes.com
@@ -56,7 +74,7 @@ ORIGENES_PERMITIDOS=https://TU-FRONTEND
 FRONTEND_URL=https://TU-FRONTEND
 ```
 
-`ADMIN_PASSWORD` solo se usa **la primera vez**, cuando se crea el administrador (los arranques siguientes no la tocan). Si dejas la clave de ejemplo `Admin123!`, la cuenta obliga a cambiarla en el primer acceso, así que aun con esa clave no queda una puerta abierta. Si algún día pierdes el acceso, pon `ADMIN_RESTABLECER_CONTRASENA=true`, redespliega, entra y vuelve a ponerla en `false`.
+`ADMIN_PASSWORD` solo se usa **la primera vez**, cuando se crea el administrador (los arranques siguientes no la tocan): **ponla propia antes del primer arranque**. Con la clave de ejemplo `Admin123!` la cuenta obliga a cambiarla en el primer acceso, pero esa clave está en el repositorio: hasta que tú entres, cualquiera que la conozca puede entrar primero y quedarse con la cuenta. Una base nueva (por ejemplo, al cambiar de proveedor) vuelve a crear el administrador con lo que diga `ADMIN_PASSWORD` en ese momento, así que si era la de ejemplo, entra y cámbiala enseguida. Si algún día pierdes el acceso, pon `ADMIN_RESTABLECER_CONTRASENA=true`, redespliega, entra y vuelve a ponerla en `false`.
 
 `PROXIES_DE_CONFIANZA=1` (Railway pone un proxy delante) hace que los límites de intentos identifiquen al cliente por su IP real. `DEPURACION` debe estar en `false`: encendida publica `/docs` y vuelca en el log cada consulta SQL con sus datos.
 
@@ -131,13 +149,13 @@ Railway cobra por consumo: **$10 por GB de RAM al mes**, **$20 por vCPU al mes**
 4. **Despliega menos veces.** Cada build consume cómputo: agrupa los cambios en un commit en vez de empujar seis seguidos.
 5. **Borra lo que no uses.** Servicios viejos, entornos de prueba y despliegues parados siguen ocupando.
 
-La base en Aiven y el frontend en Cloudflare no consumen créditos de Railway.
+El frontend en Cloudflare no consume créditos de Railway, pero **la base MySQL sí, y es el gasto fijo del proyecto**: a diferencia del backend, un servicio de base de datos no se duerme, así que corre las 24 horas (RAM y volumen). Con el plan Trial de $5 únicos puede agotarse en semanas: pon el límite duro del punto 1 y mira **Settings → Usage** de vez en cuando.
 
 ---
 
 ## Problemas frecuentes
 
-**`/api/health` dice `"baseDeDatos": "sin conexion"` y todo devuelve 503.** El backend está vivo pero no llega a la base. Con un servicio gestionado, casi siempre está **apagado** (el plan gratuito de Aiven se apaga tras un tiempo sin uso; a veces el nombre del servidor deja de resolver): enciéndelo desde su consola y espera unos minutos. No hace falta redesplegar: el backend reintenta solo cada pocos segundos y, cuando la base responde, termina de prepararla (y migra, si toca). Si la base se recreó de cero, se crea y se siembra sola, pero se pierden los datos anteriores. Antes de encender una base con datos que importan, haz el `mysqldump` de la sección 1: el backend la migrará en cuanto pueda conectarse. `"migracion pendiente"` es la pausa que pediste con `MIGRACION_AUTOMATICA=false` (ver la sección 1). `"error"` significa que la preparación falló por otra causa (mira el log).
+**`/api/health` dice `"baseDeDatos": "sin conexion"` y todo devuelve 503.** El backend está vivo pero no llega a la base. El log del backend (panel de Railway, o `railway logs -s aurora-backend -d`) dice por qué: «La base de datos sigue sin responder (intento N: …)», con el código y el mensaje del controlador: `2003 … Name or service not known` es un nombre que no resuelve, `Connection refused` un servicio que no escucha y `1045 Access denied` un usuario o una clave que no valen. Con el MySQL de Railway, comprueba que el servicio **MySQL** esté *Online* y que `DATABASE_URL` sea la referencia `${{MySQL.MYSQL_URL}}` y no una URL vieja. Con un servicio gestionado externo, casi siempre está **apagado** (el plan gratuito de Aiven se apaga tras un tiempo sin uso, y entonces su nombre de servidor deja de resolver): enciéndelo desde su consola y espera unos minutos. No hace falta redesplegar: el backend reintenta solo cada pocos segundos y, cuando la base responde, termina de prepararla (y migra, si toca). Si la base se recreó de cero, se crea y se siembra sola, pero se pierden los datos anteriores. Antes de encender una base con datos que importan, haz el `mysqldump` de la sección 1: el backend la migrará en cuanto pueda conectarse. `"migracion pendiente"` es la pausa que pediste con `MIGRACION_AUTOMATICA=false` (ver la sección 1). `"error"` significa que la preparación falló por otra causa (mira el log).
 
 **El backend reinicia en bucle.** Casi siempre es `SECRET_KEY` sin definir: la aplicación no arranca sin ella.
 
