@@ -7,7 +7,10 @@ import { useCarga } from "../utils/useCarga";
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 const dinero = (valor) => `$${Number(valor || 0).toLocaleString("es-CO")}`;
 const estadoTexto = (estado) => estado?.replace("_", " ") || "pendiente";
-const PESTANAS = ["resumen", "reservas vendidas", "facturas", "pqr", "chatbot"];
+// El personal ve además la analítica de ventas; el cliente, solo lo suyo (el servidor filtra cada dato por su cuenta).
+const PESTANAS_PERSONAL = [["resumen", "Resumen"], ["reservas vendidas", "Reservas vendidas"], ["facturas", "Facturas"], ["pqr", "PQR"], ["chatbot", "Chatbot"]];
+const PESTANAS_CLIENTE = [["facturas", "Mis facturas"], ["pqr", "Mis PQR"], ["chatbot", "Chatbot"]];
+const TIPOS_PQR = { peticion: "Petición", queja: "Queja", reclamo: "Reclamo" };
 const CAMPO = "mt-1 w-full rounded-xl border border-primario/12 bg-white/70 px-3 py-2 text-sm text-texto shadow-sm shadow-primario/5 outline-none backdrop-blur-sm transition focus:border-primario-suave focus:bg-white/90 focus:ring-3 focus:ring-primario-suave/20";
 const BOTON_VIDRIO = "vidrio rounded-xl px-4 py-2 text-sm font-semibold text-primario transition hover:-translate-y-0.5 hover:bg-white/85";
 
@@ -217,21 +220,22 @@ function TablaRanking({ titulo, subtitulo, filas, columnas, vacio }) {
 export default function AvanceCinco() {
   const { sesion } = useAuth();
   const [parametros, setParametros] = useSearchParams();
+  const rol = sesion?.usuario?.rol;
+  const esPersonal = rol === "administrador" || rol === "empleado";
+  const pestanas = esPersonal ? PESTANAS_PERSONAL : PESTANAS_CLIENTE;
   // La pestaña sale de la dirección (`?vista=`): la barra lateral y las pestañas cambian lo mismo, y no hay que sincronizar nada.
   const vistaPedida = parametros.get("vista");
-  const pestana = PESTANAS.includes(vistaPedida) ? vistaPedida : "resumen";
+  const pestana = pestanas.some(([clave]) => clave === vistaPedida) ? vistaPedida : pestanas[0][0];
   const [filtros, setFiltros] = useState({ desde: "", hasta: "", periodo: "mes", estado: "", producto_id: "", servicio_id: "", cliente_id: "" });
   const [formPqr, setFormPqr] = useState({ tipo: "peticion", asunto: "", descripcion: "" });
   const [pregunta, setPregunta] = useState("");
   const [respuesta, setRespuesta] = useState("");
   const [mensaje, setMensaje] = useState("");
-  const rol = sesion?.usuario?.rol;
-  const esPersonal = rol === "administrador" || rol === "empleado";
   const headers = { Authorization: `Bearer ${sesion?.token}` };
 
   const consulta = new URLSearchParams(Object.entries(filtros).filter(([, valor]) => valor)).toString();
   const resumen = useCarga(sesion && esPersonal ? `/estadisticas?${consulta}` : "");
-  const historial = useCarga(sesion ? `/ventas?${consulta}` : "");
+  const historial = useCarga(sesion && esPersonal ? `/ventas?${consulta}` : "");
   const listadoDeFacturas = useCarga(sesion ? "/facturas" : "");
   const solicitudes = useCarga(sesion ? "/pqr" : "");
   // El producto, el servicio y el cliente son catálogos aparte: solo hacen falta para armar los
@@ -263,37 +267,46 @@ export default function AvanceCinco() {
   const indicadores = datos?.indicadores;
   return <div className="mx-auto w-[92%] max-w-275 flex-1 py-8 sm:py-12">
     <section className="vidrio flex flex-wrap items-end justify-between gap-5 rounded-3xl p-6 sm:p-8">
-      <div>
-        <span className="antetitulo">Quinto entregable</span>
-        <h1 className="mt-3 font-display text-4xl font-bold"><span className="titulo-aurora">Reservas y facturación</span></h1>
-        <p className="mt-2 max-w-2xl text-sm text-texto-suave">Cada reserva de viaje se convierte en una venta, factura y registro consultable.</p>
-      </div>
+      {esPersonal ? (
+        <div>
+          <span className="antetitulo">Quinto entregable</span>
+          <h1 className="mt-3 font-display text-4xl font-bold"><span className="titulo-aurora">Reservas y facturación</span></h1>
+          <p className="mt-2 max-w-2xl text-sm text-texto-suave">Cada reserva de viaje se convierte en una venta, factura y registro consultable.</p>
+        </div>
+      ) : (
+        <div>
+          <span className="antetitulo">Tu cuenta</span>
+          <h1 className="mt-3 font-display text-4xl font-bold"><span className="titulo-aurora">Facturas y atención</span></h1>
+          <p className="mt-2 max-w-2xl text-sm text-texto-suave">Descarga las facturas de tus viajes, envíanos peticiones, quejas o reclamos y resuelve tus dudas con el asistente de Aurora.</p>
+        </div>
+      )}
       <span className="rounded-full border border-primario/12 bg-white/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-texto-suave backdrop-blur-sm">Rol: {rol}</span>
     </section>
 
     {(mensaje || avisoDeCarga) && <p role="alert" className="vidrio mt-5 rounded-2xl p-4 text-sm text-texto">{mensaje || avisoDeCarga}</p>}
 
     {/* Navegación por pestañas, también accesible sin la barra lateral. */}
-    <div className="vidrio-sutil mt-6 flex flex-wrap gap-1.5 rounded-2xl p-1.5" role="tablist" aria-label="Secciones comerciales">
-      {PESTANAS.map((vista) => (
+    <div className="vidrio-sutil mt-6 flex flex-wrap gap-1.5 rounded-2xl p-1.5" role="tablist" aria-label={esPersonal ? "Secciones comerciales" : "Secciones de tu cuenta"}>
+      {pestanas.map(([vista, etiqueta]) => (
         <button
           key={vista}
           type="button"
           role="tab"
           aria-selected={pestana === vista}
           onClick={() => setParametros({ vista }, { replace: true })}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold capitalize transition ${
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
             pestana === vista
               ? "boton-tinta text-white"
               : "text-texto-suave hover:bg-white/60 hover:text-primario"
           }`}
         >
-          {vista}
+          {etiqueta}
         </button>
       ))}
     </div>
 
-    <form className="vidrio mt-5 grid gap-3 rounded-2xl p-4 sm:grid-cols-2 lg:grid-cols-4" onSubmit={(evento) => evento.preventDefault()}>
+    {/* Los filtros son de la analítica de ventas: el cliente no los necesita. */}
+    {esPersonal && <form className="vidrio mt-5 grid gap-3 rounded-2xl p-4 sm:grid-cols-2 lg:grid-cols-4" onSubmit={(evento) => evento.preventDefault()}>
       <label className="text-xs font-semibold uppercase text-texto-suave">Desde<input type="date" value={filtros.desde} onChange={(evento) => setFiltros({ ...filtros, desde: evento.target.value })} className={CAMPO} /></label>
       <label className="text-xs font-semibold uppercase text-texto-suave">Hasta<input type="date" value={filtros.hasta} onChange={(evento) => setFiltros({ ...filtros, hasta: evento.target.value })} className={CAMPO} /></label>
       <label className="text-xs font-semibold uppercase text-texto-suave">Agrupar<select value={filtros.periodo} onChange={(evento) => setFiltros({ ...filtros, periodo: evento.target.value })} className={CAMPO}><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option></select></label>
@@ -323,7 +336,7 @@ export default function AvanceCinco() {
           </label>
         )}
       </>}
-    </form>
+    </form>}
 
     {pestana === "resumen" && <section className="mt-8 space-y-6">
       {datos ? <>
@@ -409,8 +422,8 @@ export default function AvanceCinco() {
     </section>}
 
     {pestana === "facturas" && <section className="vidrio mt-8 rounded-3xl p-6">
-      <h2 className="font-display text-2xl font-bold text-primario">Facturas de reservas</h2>
-      <p className="mt-1 text-sm text-texto-suave">Cada factura detalla el vuelo, el hotel y las excursiones por separado.</p>
+      <h2 className="font-display text-2xl font-bold text-primario">{esPersonal ? "Facturas de reservas" : "Mis facturas"}</h2>
+      <p className="mt-1 text-sm text-texto-suave">Cada factura detalla el vuelo, el hotel y las excursiones por separado{esPersonal ? "." : "; descárgala en PDF cuando la necesites."}</p>
       <div className="mt-5 divide-y divide-primario/10">
         {facturas.map((item) => <article key={item.id} className="flex flex-wrap items-center justify-between gap-4 py-4">
           <div>
@@ -419,7 +432,7 @@ export default function AvanceCinco() {
           </div>
           <DescargarFactura id={item.id} headers={headers} />
         </article>)}
-        {facturas.length === 0 && <p className="py-4 text-sm text-texto-suave">No hay facturas disponibles.</p>}
+        {facturas.length === 0 && <p className="py-4 text-sm text-texto-suave">{esPersonal ? "No hay facturas disponibles." : "Aún no tienes facturas: se generan al registrar cada reserva."}</p>}
       </div>
     </section>}
 
@@ -434,14 +447,20 @@ export default function AvanceCinco() {
         </div>
       </form>
       <div className="vidrio rounded-3xl p-6">
-        <h2 className="font-display text-2xl font-bold text-primario">Seguimiento de solicitudes</h2>
+        <h2 className="font-display text-2xl font-bold text-primario">{esPersonal ? "Seguimiento de solicitudes" : "Mis solicitudes"}</h2>
         <div className="mt-4 divide-y divide-primario/10">
           {pqr.map((item) => <article key={item.id} className="py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <strong>{item.asunto}</strong>
               <span className="rounded-full border border-primario/12 bg-white/60 px-2.5 py-0.5 text-xs font-semibold capitalize text-primario backdrop-blur-sm">{estadoTexto(item.estado)}</span>
             </div>
+            <p className="mt-0.5 text-xs text-texto-suave">{TIPOS_PQR[item.tipo] || item.tipo} · {item.fecha?.slice(0, 10)}{esPersonal && item.cliente ? ` · ${item.cliente}` : ""}</p>
             <p className="mt-1 text-sm text-texto-suave">{item.descripcion}</p>
+            {item.respuesta && (
+              <p className="mt-2 rounded-xl border-l-4 border-l-acento bg-white/50 px-3 py-2 text-sm text-texto">
+                <strong className="text-primario">Respuesta de Aurora:</strong> {item.respuesta}
+              </p>
+            )}
             {esPersonal && <select value={item.estado} onChange={(evento) => actualizarPqr(item, evento.target.value)} className={`${CAMPO} w-auto`}><option value="pendiente">Pendiente</option><option value="en_proceso">En proceso</option><option value="respondida">Respondida</option><option value="cerrada">Cerrada</option></select>}
           </article>)}
           {pqr.length === 0 && <p className="py-4 text-sm text-texto-suave">No hay solicitudes registradas.</p>}

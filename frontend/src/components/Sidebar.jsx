@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { esPersonal } from "../utils/rutas";
@@ -11,7 +11,46 @@ function Sidebar() {
 
   const rol = sesion?.usuario?.rol;
   const esPersonalUsuario = esPersonal(sesion?.usuario);
-  const vistaActiva = new URLSearchParams(location.search).get("vista") || "reservas";
+  const enComercial = location.pathname === "/panel/avance-cinco";
+  // Sin `?vista=`, cada página abre en su primera vista: la misma que marca aquí la barra.
+  const vistaActiva =
+    new URLSearchParams(location.search).get("vista") || (enComercial ? (esPersonalUsuario ? "resumen" : "facturas") : "reservas");
+
+  const aPanel = (vista, etiqueta, icono) => ({
+    a: `/panel?vista=${vista}`, etiqueta, icono, activo: location.pathname === "/panel" && vistaActiva === vista,
+  });
+  const aComercial = (vista, etiqueta, icono) => ({
+    a: `/panel/avance-cinco?vista=${encodeURIComponent(vista)}`, etiqueta, icono, activo: enComercial && vistaActiva === vista,
+  });
+  // El personal gestiona la agencia; el cliente solo ve lo suyo (el servidor filtra cada dato por su cuenta).
+  const secciones = esPersonalUsuario
+    ? [
+        {
+          titulo: "Gestión",
+          enlaces: [
+            aPanel("reservas", "Reservas", "▤"),
+            aPanel("nueva", "Nueva reserva", "＋"),
+            aPanel("vuelos", "Vuelos", "✈"),
+            ...(rol === "administrador"
+              ? [aPanel("catalogo", "Catálogo", "✦"), aPanel("usuarios", "Usuarios", "♙"), aPanel("mensajes", "Mensajes", "✉")]
+              : []),
+          ],
+        },
+        {
+          titulo: "Comercial",
+          enlaces: [
+            aComercial("resumen", "Resumen", "◌"),
+            aComercial("reservas vendidas", "Reservas vendidas", "▥"),
+            aComercial("facturas", "Facturas", "▣"),
+            aComercial("pqr", "PQR", "?"),
+            aComercial("chatbot", "Chatbot", "✦"),
+          ],
+        },
+      ]
+    : [
+        { titulo: "Mi cuenta", enlaces: [aPanel("reservas", "Mis reservas", "▤"), aComercial("facturas", "Mis facturas", "▣")] },
+        { titulo: "Atención", enlaces: [aComercial("pqr", "Mis PQR", "?"), aComercial("chatbot", "Chatbot", "✦")] },
+      ];
 
   const enlaceClase = (activo) =>
     `group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
@@ -82,45 +121,16 @@ function Sidebar() {
           </div>
 
           <nav className="flex-1 space-y-1 px-4 py-6">
-            <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6f8090]">Gestión</p>
-            {[
-              ["reservas", esPersonalUsuario ? "Reservas" : "Mis reservas", "▤", true],
-              ["nueva", "Nueva reserva", "＋", esPersonalUsuario],
-              ["vuelos", "Vuelos", "✈", esPersonalUsuario],
-              ["catalogo", "Catálogo", "✦", rol === "administrador"],
-              ["usuarios", "Usuarios", "♙", rol === "administrador"],
-              ["mensajes", "Mensajes", "✉", rol === "administrador"],
-            ]
-              .filter(([, , , visible]) => visible)
-              .map(([vista, etiqueta, icono]) => (
-                <NavLink
-                  key={vista}
-                  to={`/panel?vista=${vista}`}
-                  className={() => enlaceClase(location.pathname === "/panel" && vistaActiva === vista)}
-                  onClick={() => setSidebarAbierto(false)}
-                >
-                  <span className="flex items-center gap-3"><span className="text-base">{icono}</span> {etiqueta}</span>
-                  <span className="text-xs opacity-60">→</span>
-                </NavLink>
-              ))}
-
-            <p className="mb-3 mt-8 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6f8090]">Comercial</p>
-            {[
-              ["resumen", "Resumen", "◌"],
-              ["reservas vendidas", "Reservas vendidas", "▥"],
-              ["facturas", "Facturas", "▣"],
-              ["pqr", "PQR", "?"],
-              ["chatbot", "Chatbot", "✦"],
-            ].map(([vista, etiqueta, icono]) => (
-              <NavLink
-                key={vista}
-                to={`/panel/avance-cinco?vista=${encodeURIComponent(vista)}`}
-                className={() => enlaceClase(location.pathname === "/panel/avance-cinco" && vistaActiva === vista)}
-                onClick={() => setSidebarAbierto(false)}
-              >
-                <span className="flex items-center gap-3"><span className="text-base">{icono}</span> {etiqueta}</span>
-                <span className="text-xs opacity-60">→</span>
-              </NavLink>
+            {secciones.map((seccion, indice) => (
+              <Fragment key={seccion.titulo}>
+                <p className={`mb-3 ${indice > 0 ? "mt-8 " : ""}px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6f8090]`}>{seccion.titulo}</p>
+                {seccion.enlaces.map((enlace) => (
+                  <NavLink key={enlace.a} to={enlace.a} className={() => enlaceClase(enlace.activo)} onClick={() => setSidebarAbierto(false)}>
+                    <span className="flex items-center gap-3"><span className="text-base">{enlace.icono}</span> {enlace.etiqueta}</span>
+                    <span className="text-xs opacity-60">→</span>
+                  </NavLink>
+                ))}
+              </Fragment>
             ))}
 
             <p className="mb-3 mt-8 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6f8090]">Acceso rápido</p>

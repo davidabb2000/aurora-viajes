@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { IconoPin } from "./Decoraciones";
-import { esPersonal } from "../utils/rutas";
 
 const ENLACES = [
   { a: "/recomendaciones", texto: "Recomendaciones" },
@@ -152,11 +151,11 @@ function Header() {
                       <p className="truncate text-xs text-texto-suave">{sesion.usuario.correo}</p>
                     </div>
                     <NavLink
-                      to={esPersonal(sesion.usuario) ? "/panel" : "/reservas"}
+                      to="/panel"
                       role="menuitem"
                       className="block px-4 py-3 text-sm font-medium text-primario no-underline transition hover:bg-arena/60"
                     >
-                      {esPersonal(sesion.usuario) ? "Mi panel" : "Mis reservas"}
+                      Mi panel
                     </NavLink>
                     <NavLink
                       to="/cambiar-contrasena"
@@ -241,11 +240,11 @@ function Header() {
           {sesion ? (
             <div className="flex items-center justify-between gap-3">
               <Link
-                to={esPersonal(sesion.usuario) ? "/panel" : "/reservas"}
+                to="/panel"
                 onClick={() => setMovilAbierto(false)}
                 className="boton-tinta px-6 py-3 text-sm font-semibold no-underline"
               >
-                {esPersonal(sesion.usuario) ? "Mi panel" : "Mis reservas"}
+                Mi panel
               </Link>
               <button
                 type="button"

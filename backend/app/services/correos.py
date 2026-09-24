@@ -322,7 +322,7 @@ def contenido_de_pago(reserva: dict, cobro: dict) -> tuple[str, str]:
 
 async def enviar_correo_pago_confirmado(destinatario: str, nombre_usuario: str, reserva: dict, cobro: dict, adjuntos: list[Adjunto] | None = None) -> bool:
     cuerpo_html, cuerpo_texto = contenido_de_pago(reserva, cobro)
-    enlace = f"{configuracion.frontend_url.rstrip('/')}/reservas"
+    enlace = f"{configuracion.frontend_url.rstrip('/')}/panel?vista=reservas"
     texto = (
         f"Aurora Viajes - Pago confirmado\n\nHola {nombre_usuario},\n\n"
         f"Recibimos tu pago: la reserva #{reserva['id']} a {reserva['ciudad']}, {reserva['pais']} quedó confirmada.\n"
