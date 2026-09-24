@@ -207,3 +207,46 @@ class TestWebhookFirmado:
         assert reserva["estado"] == "cancelada"  # el cobro queda visible para reembolsarlo a mano
         assert reserva["estadoPago"] == "pagado"
         assert venta_de(reserva_id)["estado"] == "cancelada"
+
+
+# ------------------------------------------------------------------ correo de confirmación del pago
+
+
+def test_el_pago_con_stripe_manda_un_solo_correo_aunque_avisen_navegador_y_webhook(
+    api, crear_cliente, viaje, reservar, stripe_falso, con_secreto_de_webhook, buzon
+):
+    cliente = crear_cliente()
+    reserva_id, creada = reservar(cliente, viaje)
+    abierta = api.post(f"/api/reservas/{reserva_id}/pago/checkout", headers=cliente.headers).json()
+    stripe_falso["sesiones"][abierta["sessionId"]].update({"payment_status": "paid", "status": "complete"})
+    buzon.clear()
+
+    cuerpo = {"sessionId": abierta["sessionId"]}
+    assert api.post(f"/api/reservas/{reserva_id}/pago/confirmar", headers=cliente.headers, json=cuerpo).status_code == 200
+    assert api.post(f"/api/reservas/{reserva_id}/pago/confirmar", headers=cliente.headers, json=cuerpo).status_code == 200
+    tardio = enviar_webhook(api, evento_de_pago(reserva_id, creada["montoTotal"], abierta["sessionId"]))
+    assert tardio.status_code == 200 and tardio.json()["aplicado"] is False
+
+    (correo,) = buzon
+    assert correo.para == cliente.correo and correo.asunto.startswith("Pago confirmado")
+    assert "Tarjeta en línea (Stripe)" in correo.html
+    assert correo.adjuntos and correo.adjuntos[0].contenido.startswith(b"%PDF")
+
+
+def test_si_solo_avisa_el_webhook_tambien_llega_el_correo(api, crear_cliente, viaje, reservar, buzon):
+    """El cliente pagó y cerró la pestaña antes de volver: el aviso de Stripe basta."""
+    cliente = crear_cliente()
+    reserva_id, creada = reservar(cliente, viaje)
+    buzon.clear()
+    pagar_por_webhook(api, reserva_id, creada["montoTotal"])
+    (correo,) = buzon
+    assert correo.para == cliente.correo and f"Reserva #{reserva_id}" in correo.asunto
+
+
+def test_el_pago_de_una_reserva_cancelada_no_manda_la_confirmacion(api, admin, crear_cliente, viaje, reservar, buzon):
+    cliente = crear_cliente()
+    reserva_id, creada = reservar(cliente, viaje)
+    api.patch(f"/api/reservas/{reserva_id}/estado", headers=admin, json={"estado": "cancelada"})
+    buzon.clear()
+    pagar_por_webhook(api, reserva_id, creada["montoTotal"])
+    assert not any(correo.asunto.startswith("Pago confirmado") for correo in buzon)

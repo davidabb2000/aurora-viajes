@@ -21,7 +21,7 @@ function PagoExitoso() {
           method: "POST",
           body: JSON.stringify({ sessionId }),
         });
-        if (activo) setMensaje("Pago confirmado. Tu reserva ya quedó lista.");
+        if (activo) setMensaje("Pago confirmado. Tu reserva ya quedó lista: te enviamos a tu correo la confirmación con todos los detalles y la factura.");
       } catch (requestError) {
         if (!activo) return;
         setError(requestError.message);

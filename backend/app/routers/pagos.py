@@ -3,12 +3,13 @@
 import json
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 
 from app.dependencias import EmpleadoOAdmin, ReservaDeRuta, SesionDep, UsuarioActual, exigir_acceso_a_reserva
 from app.errores import ConflictoDeNegocio, ErrorDeDominio
 from app.models.dominio import Reserva
 from app.schemas.reservas import ConfirmacionDePago, PagoDeMostrador
+from app.services.notificaciones import notificar_pago_confirmado
 from app.services.pagos import (
     crear_sesion,
     expirar_sesion,
@@ -48,7 +49,10 @@ async def crear_checkout(reserva: ReservaDeRuta, usuario: UsuarioActual, sesion:
         if previa is not None:
             if previa.get("payment_status") == "paid":
                 validar_sesion_pagada(previa, reserva)
-                await registrar_pago(sesion, reserva, previa["id"])
+                if await registrar_pago(sesion, reserva, previa["id"]):
+                    # Aquí se responde con un error, y las tareas en segundo plano solo corren con una respuesta
+                    # normal: el aviso se envía antes de responder.
+                    await notificar_pago_confirmado(reserva.id)
                 raise ConflictoDeNegocio("Esta reserva ya está pagada.")
             if previa.get("status") == "open" and previa.get("url") and previa.get("amount_total") == monto_esperado(reserva):
                 # Un solo enlace abierto por reserva evita que se pague dos veces.
@@ -61,7 +65,9 @@ async def crear_checkout(reserva: ReservaDeRuta, usuario: UsuarioActual, sesion:
 
 
 @router.post("/api/reservas/{reserva_id}/pago/confirmar")
-async def confirmar_pago(reserva: ReservaDeRuta, usuario: UsuarioActual, sesion: SesionDep, payload: ConfirmacionDePago | None = None):
+async def confirmar_pago(
+    reserva: ReservaDeRuta, usuario: UsuarioActual, sesion: SesionDep, tareas: BackgroundTasks, payload: ConfirmacionDePago | None = None
+):
     """Respaldo cuando el cliente vuelve de Stripe; el webhook es la vía principal."""
     exigir_acceso_a_reserva(usuario, reserva)
     if reserva.estado_pago_rel.codigo == "pagado":
@@ -71,22 +77,25 @@ async def confirmar_pago(reserva: ReservaDeRuta, usuario: UsuarioActual, sesion:
         raise ErrorDeDominio("No se encontró la sesión de pago de Stripe.")
     datos = await obtener_sesion(session_id)
     validar_sesion_pagada(datos, reserva)
-    await registrar_pago(sesion, reserva, session_id)
+    # Solo el primer aviso del pago (navegador o webhook, el que llegue antes) manda el correo.
+    if await registrar_pago(sesion, reserva, session_id):
+        tareas.add_task(notificar_pago_confirmado, reserva.id)
     return {"mensaje": "Pago confirmado correctamente."}
 
 
 @router.post("/api/reservas/{reserva_id}/pago/manual")
-async def cobrar_en_mostrador(reserva: ReservaDeRuta, payload: PagoDeMostrador, personal: EmpleadoOAdmin, sesion: SesionDep):
+async def cobrar_en_mostrador(reserva: ReservaDeRuta, payload: PagoDeMostrador, personal: EmpleadoOAdmin, sesion: SesionDep, tareas: BackgroundTasks):
     """El personal registra un pago recibido en efectivo, por transferencia o con datáfono."""
     sesion_de_pago = reserva.stripe_session_id
     await registrar_pago_de_mostrador(sesion, reserva, payload, personal)
     # Si había un enlace de Stripe abierto se cierra: la reserva no debe poder pagarse dos veces.
     await expirar_sesion(sesion_de_pago)
+    tareas.add_task(notificar_pago_confirmado, reserva.id)
     return {"mensaje": "Pago registrado. La reserva quedó confirmada."}
 
 
 @router.post("/api/pagos/stripe/webhook")
-async def webhook_stripe(peticion: Request, sesion: SesionDep):
+async def webhook_stripe(peticion: Request, sesion: SesionDep, tareas: BackgroundTasks):
     """Stripe avisa aquí de cada pago, aunque el cliente cierre el navegador antes de volver."""
     cuerpo = await peticion.body()
     verificar_firma_webhook(cuerpo, peticion.headers.get("stripe-signature"))
@@ -115,4 +124,6 @@ async def webhook_stripe(peticion: Request, sesion: SesionDep):
         logger.error("Webhook %s no aplicado a la reserva %s: %s", evento.get("id"), reserva_id, exc.mensaje)
         return {"recibido": True, "aplicado": False}
     aplicado = await registrar_pago(sesion, reserva, objeto.get("id"))
+    if aplicado:
+        tareas.add_task(notificar_pago_confirmado, reserva.id)
     return {"recibido": True, "aplicado": aplicado}

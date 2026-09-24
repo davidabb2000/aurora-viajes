@@ -86,7 +86,13 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Opcionales, según se usen: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PROVEEDOR_IA_API_KEY`, `PROVEEDOR_IA_URL`, `PROVEEDOR_IA_MODELO`, `MYSQL_SSL_CA_PEM` y el correo (`SENDGRID_API_KEY` o `SMTP_*`). Sin clave de IA las recomendaciones funcionan con el respaldo local por palabras clave y el chatbot responde con un texto fijo.
 
-**Correo.** Railway bloquea el SMTP saliente en los planes que no son Pro, así que con `SMTP_*` los correos de recuperación pueden no salir. La alternativa es la API HTTPS de SendGrid: crea una clave de API con permiso «Mail Send», verifica el remitente (Single Sender) y define `SENDGRID_API_KEY` y `SMTP_FROM` (el remitente verificado). Para probarlo antes de desplegar: `python -m scripts.probar_correo tu@correo.com` desde `backend/`.
+**Correo.** Railway bloquea el SMTP saliente en los planes que no son Pro (el log dice «Timed out connecting to smtp.sendgrid.net on port 587»), así que el correo sale por la API HTTPS de SendGrid: crea una clave de API con permiso «Mail Send», verifica el remitente (Single Sender) y define `SENDGRID_API_KEY` y `SMTP_FROM` (el remitente verificado). Si ya tienes la configuración SMTP de SendGrid (`SMTP_HOST=smtp.sendgrid.net`, `SMTP_USER=apikey` y la clave en `SMTP_PASSWORD`), no hace falta nada más: el backend usa esa misma clave por HTTPS. `SMTP_FROM_NOMBRE` es el nombre que ve el destinatario (por defecto «Aurora Viajes»). Para probarlo antes de desplegar: `python -m scripts.probar_correo tu@correo.com` desde `backend/`.
+
+Correos que envía la app: bienvenida al registrarse, recuperación de contraseña (enlace de un solo uso, 1 hora), acuse al registrar una reserva y **confirmación del pago** —Stripe, webhook o mostrador, una sola vez por reserva— con todo el detalle del viaje (vuelos, hotel, excursiones, pasajeros, cobro) y la factura en PDF adjunta.
+
+**Cambiar el remitente.** En SendGrid, *Settings → Sender Authentication → Verify a Single Sender*, con la nueva dirección; te llega un correo con un enlace para confirmarla. Después cambia `SMTP_FROM` en Railway. Con un remitente de Gmail o Hotmail (sin dominio propio) los correos pueden caer en *Spam*: SendGrid no puede firmarlos en nombre de ese dominio. La solución definitiva es un dominio propio con *Domain Authentication*.
+
+**Cambiar el correo del administrador.** Edítalo desde el panel de Usuarios y actualiza también `ADMIN_EMAIL` en Railway. Si `ADMIN_EMAIL` se queda con el correo viejo, el arranque avisa en el log y no crea un segundo administrador.
 
 Verificación: `https://TU-BACKEND.up.railway.app/api/health` debe devolver `{"estado":"ok","baseDeDatos":"lista"}`. Con `"sin conexion"` la API vive pero no llega a la base, y con `"migracion pendiente"` espera a que actives la migración (mira «Problemas frecuentes» y la sección 1). Con `DEPURACION=false` el `/docs` queda deshabilitado a propósito.
 
@@ -165,7 +171,7 @@ El frontend en Cloudflare no consume créditos de Railway, pero **la base MySQL 
 
 **`'cryptography' package is required for ... caching_sha2_password`.** MySQL 8 usa ese método y necesita `cryptography`, que ya está en `requirements.txt`.
 
-**Los correos de recuperación no llegan.** Mira el log del backend: «SMTP no configurado» si faltan las variables, o el motivo del rechazo del proveedor. Railway bloquea el SMTP saliente en los planes que no son Pro: usa `SENDGRID_API_KEY` (correo por HTTPS). `python -m scripts.probar_correo tu@correo.com` envía uno de prueba con la configuración de `backend/.env`.
+**Los correos de recuperación no llegan.** Primero, el correo que escribes debe pertenecer a una cuenta activa: si no existe, la API responde lo mismo («si el correo está registrado…») a propósito, para no revelar qué cuentas hay, y no envía nada. Después mira el log del backend: «Correo transaccional enviado a … por SendGrid» significa que salió (revisa *Spam*); «SMTP no configurado» indica que faltan las variables, y «SendGrid rechazó el correo» trae el motivo (403 = remitente sin verificar). Railway bloquea el SMTP saliente en los planes que no son Pro: con SendGrid el correo va por HTTPS (ver la sección de correo). `python -m scripts.probar_correo tu@correo.com` envía uno de prueba con la configuración de `backend/.env`.
 
 **No puedo entrar y me pide cambiar la contraseña.** Es a propósito: las cuentas con clave provisional (las que crea un administrador y el administrador con la clave de ejemplo) tienen que fijar una propia antes de usar el panel.
 

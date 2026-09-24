@@ -163,8 +163,8 @@ Todas van en `backend/.env` en local y en las variables del servicio en Railway.
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Cobro y confirmación de pagos (el webhook exige su secreto). |
 | `PROVEEDOR_IA_API_KEY`, `_URL`, `_MODELO` | Recomendaciones y chatbot; sin clave hay respaldo local. |
 | `MYSQL_SSL_CA_PEM`, `MYSQL_SSL_CA`, `MYSQL_SSL_VERIFICAR_HOST` | Verificar el certificado de la base gestionada: el contenido del PEM de la CA (o su ruta), y si además debe coincidir el nombre del servidor (por defecto no). |
-| `SENDGRID_API_KEY` | Correos por la API HTTPS de SendGrid; el remitente es `SMTP_FROM`, que debe estar verificado allí. Con clave, se usa esta vía en lugar de SMTP. |
-| `SMTP_*` | Correos de bienvenida, recuperación y reserva por SMTP (Railway bloquea el SMTP saliente en los planes que no son Pro: allí usa `SENDGRID_API_KEY`). |
+| `SENDGRID_API_KEY` | Correos por la API HTTPS de SendGrid; el remitente es `SMTP_FROM` (con el nombre `SMTP_FROM_NOMBRE`), que debe estar verificado allí. Con clave, se usa esta vía en lugar de SMTP. Con `SMTP_HOST=smtp.sendgrid.net` y `SMTP_USER=apikey` no hace falta: se usa `SMTP_PASSWORD` como clave. |
+| `SMTP_*` | Correos de bienvenida, recuperación, reserva y confirmación de pago por SMTP (Railway bloquea el SMTP saliente en los planes que no son Pro: allí el correo va por la API de SendGrid). |
 | `BD_SIN_POOL` | Sin conexiones ociosas, para que Railway Serverless pueda dormir el servicio. |
 
 En el frontend solo existe `VITE_API_URL` (URL del backend terminada en `/api`), que Vite incrusta al compilar y de la que sale también el origen permitido en la política de contenido.

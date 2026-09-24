@@ -84,12 +84,28 @@ class Configuracion(BaseSettings):
     smtp_user: str | None = None
     smtp_password: str | None = None
     smtp_from: str = "noreply@auroraviajes.com"
+    # Nombre que ve el destinatario junto a la dirección del remitente.
+    smtp_from_nombre: str = "Aurora Viajes"
     smtp_use_tls: bool = True
     # Envío por la API HTTPS de SendGrid. Railway bloquea el SMTP saliente en los planes que no son Pro, y por HTTPS
     # los correos salen igual. Si hay clave, se usa esta vía en lugar de SMTP; el remitente (SMTP_FROM) debe estar
     # verificado en SendGrid.
     sendgrid_api_key: str | None = None
     sendgrid_api_url: str = "https://api.sendgrid.com/v3/mail/send"
+
+    @property
+    def clave_sendgrid(self) -> str | None:
+        """La clave para la API HTTPS de SendGrid: `SENDGRID_API_KEY` o, si el SMTP configurado es el de SendGrid, su contraseña.
+
+        En el SMTP de SendGrid el usuario es literalmente `apikey` y la contraseña es una clave de API, que vale igual
+        para la API HTTPS. Sin esto, un despliegue con la configuración SMTP de SendGrid en Railway se quedaba en
+        «Timed out connecting to smtp.sendgrid.net on port 587» y no salía ni un correo.
+        """
+        if self.sendgrid_api_key:
+            return self.sendgrid_api_key
+        es_sendgrid = (self.smtp_host or "").strip().lower() == "smtp.sendgrid.net" and (self.smtp_user or "").strip() == "apikey"
+        clave = (self.smtp_password or "").strip()
+        return clave if es_sendgrid and clave else None
 
     @field_validator("origenes_permitidos", mode="before")
     @classmethod

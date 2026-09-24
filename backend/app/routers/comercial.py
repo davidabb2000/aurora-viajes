@@ -19,6 +19,7 @@ from app.models.dominio import Conversacion, DetalleFactura, DetalleVenta, Estad
 from app.schemas.comercial import ChatEntrada, PQRActualizacion, PQREntrada, VentaEntrada
 from app.services.catalogos import escapar_like
 from app.services.documentos import construir_pdf, construir_xlsx
+from app.services.facturas import cargar_factura, pdf_de_factura
 from app.services.recomendaciones import ProveedorNoDisponible, ServicioDeRecomendaciones
 
 router = APIRouter(prefix="/api", tags=["comercial"])
@@ -309,57 +310,12 @@ async def reporte_ventas(
 
 @router.get("/facturas/{factura_id}/pdf")
 async def descargar_factura(factura_id: int, sesion: SesionDep, usuario: UsuarioActual):
-    factura = await sesion.scalar(select(Factura).options(selectinload(Factura.detalles), selectinload(Factura.venta).selectinload(Venta.cliente)).where(Factura.id == factura_id))
+    factura = await cargar_factura(sesion, factura_id)
     if not factura:
         raise RecursoNoEncontrado("una factura", factura_id)
     if usuario.role.nombre == "cliente" and factura.venta.cliente_id != usuario.id:
         raise PermisoDenegado("No tiene permiso para descargar esta factura.")
-    venta = factura.venta
-    cliente = venta.cliente
-    filas_pdf = [
-        [detalle.nombre, detalle.cantidad, f"${_dinero(detalle.precio_unitario):,.2f}", f"${_dinero(detalle.subtotal):,.2f}"]
-        for detalle in factura.detalles
-    ]
-    columnas = [("Concepto", 247), ("Cant.", 55, "der"), ("Precio unitario", 110, "der"), ("Subtotal", 120, "der")]
-    totales = ["TOTAL A PAGAR", str(sum(detalle.cantidad for detalle in factura.detalles)), "", f"${_dinero(venta.total):,.2f}"]
-    # La factura ahora identifica a quien emite y a quien se le cobra: antes
-    # solo llevaba el nombre del cliente metido en el subtitulo.
-    bloques = [
-        ("Emisor", [
-            ("Razon social", "Aurora Viajes S.A.S."),
-            ("NIT", "901.455.783-1"),
-            ("Direccion", "Medellin, Colombia"),
-            ("Contacto", "contacto@auroraviajes.com | +57 350 357 6793"),
-        ]),
-        ("Cliente", [
-            ("Nombre", f"{cliente.nombre} {cliente.apellido}"),
-            ("Documento", getattr(cliente, "numero_documento", None) or "No registrado"),
-            ("Correo", cliente.correo),
-            ("Telefono", getattr(cliente, "telefono", None) or "No registrado"),
-        ]),
-        ("Factura", [
-            ("Numero", factura.numero),
-            ("Fecha de emision", factura.creado_en.strftime("%Y-%m-%d %H:%M")),
-            ("Estado", factura.estado),
-            ("Venta asociada", f"#{venta.id} ({venta.estado})"),
-        ]),
-    ]
-    documento = construir_pdf(
-        "Factura de venta",
-        f"{factura.numero} | Cliente: {cliente.nombre} {cliente.apellido}",
-        columnas,
-        filas_pdf,
-        [
-            ("Subtotal", f"${_dinero(venta.subtotal):,.2f}"),
-            ("Descuento", f"${_dinero(venta.descuento):,.2f}"),
-            ("Impuestos", f"${_dinero(venta.impuestos):,.2f}"),
-            ("Total", f"${_dinero(venta.total):,.2f}"),
-        ],
-        bloques=bloques,
-        totales=totales,
-        notas="Documento generado electronicamente por Aurora Viajes. Conservelo como soporte de su reserva; cualquier aclaracion puede solicitarla respondiendo al correo de confirmacion.",
-    )
-    return Response(documento, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={factura.numero}.pdf"})
+    return Response(pdf_de_factura(factura), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={factura.numero}.pdf"})
 
 
 @router.get("/estadisticas")

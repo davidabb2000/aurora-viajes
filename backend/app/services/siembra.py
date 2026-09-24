@@ -460,6 +460,17 @@ async def _asegurar_administrador(sesion: AsyncSession) -> None:
     clave_conocida = _es_clave_conocida(configuracion.admin_password)
 
     if admin is None:
+        # Si el administrador cambió su correo desde la app y ADMIN_EMAIL se quedó con el viejo, crear otro dejaría
+        # una segunda cuenta de administrador con la clave de ADMIN_PASSWORD (a menudo la de ejemplo) y con un
+        # correo que quizá ni es de la agencia. El administrador inicial solo se crea si no hay ninguno.
+        otro_admin = await sesion.scalar(select(User.id).where(User.rol_id == rol.id, User.activo.is_(True)).limit(1))
+        if otro_admin is not None:
+            logger.warning(
+                "ADMIN_EMAIL (%s) no corresponde a ninguna cuenta, pero ya hay un administrador activo: no se crea otro. "
+                "Si cambiaste el correo del administrador, actualiza ADMIN_EMAIL.",
+                correo,
+            )
+            return
         sesion.add(User(
             nombre="Administrador", apellido="Aurora", tipo_documento_id=tipo.id, numero_documento="1000000000",
             direccion="Oficina principal Aurora Viajes", telefono="3000000000", correo=correo,

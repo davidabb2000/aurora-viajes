@@ -220,3 +220,22 @@ def venta_de(api, admin):
         return next((v for v in api.get("/api/ventas", headers=admin).json() if v["reservaId"] == reserva_id), None)
 
     return _venta
+
+
+@pytest.fixture
+def buzon(monkeypatch):
+    """Captura cada correo que la app intenta enviar, en lugar de enviarlo.
+
+    Devuelve la lista de correos como SimpleNamespace(asunto, para, texto, html, adjuntos). Las tareas en
+    segundo plano ya terminaron cuando el TestClient devuelve la respuesta, así que se puede mirar enseguida.
+    """
+    from app.services import correos
+
+    enviados = []
+
+    async def falso(asunto, destinatario, texto, cuerpo_html, adjuntos=None):
+        enviados.append(SimpleNamespace(asunto=asunto, para=destinatario, texto=texto, html=cuerpo_html, adjuntos=list(adjuntos or [])))
+        return True
+
+    monkeypatch.setattr(correos, "_enviar", falso)
+    return enviados

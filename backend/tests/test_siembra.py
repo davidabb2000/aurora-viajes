@@ -143,3 +143,37 @@ def test_una_sqlite_de_una_version_anterior_pide_recrearse():
         )
     assert resultado.returncode != 0
     assert "versión anterior" in resultado.stderr
+
+
+def test_si_el_admin_cambia_su_correo_el_arranque_no_crea_otro_administrador():
+    """Regresión: con ADMIN_EMAIL viejo, el siguiente arranque creaba un segundo admin con la clave de ADMIN_PASSWORD."""
+    guion = textwrap.dedent(
+        """
+        import os, sqlite3, sys
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        ruta = os.environ["SQLITE_PATH"]
+        with TestClient(app):
+            pass
+        con = sqlite3.connect(ruta)
+        con.execute("UPDATE usuarios SET correo = 'admin-nuevo@example.com' WHERE correo = 'admin-viejo@example.com'")
+        con.commit()
+        con.close()
+        with TestClient(app):
+            pass
+        con = sqlite3.connect(ruta)
+        admins = con.execute(
+            "SELECT u.correo FROM usuarios u JOIN roles r ON r.id = u.rol_id WHERE r.nombre = 'administrador'"
+        ).fetchall()
+        con.close()
+        print(admins)
+        sys.exit(0 if admins == [("admin-nuevo@example.com",)] else 1)
+        """
+    )
+    with tempfile.TemporaryDirectory() as carpeta:
+        resultado = subprocess.run(
+            [sys.executable, "-c", guion], env=_entorno_de(Path(carpeta) / "admin.db", ADMIN_EMAIL="admin-viejo@example.com"),
+            cwd=carpeta, capture_output=True, text=True, timeout=240,
+        )
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr[-2000:]

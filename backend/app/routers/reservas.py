@@ -11,6 +11,7 @@ from app.schemas.reservas import EstadoDeReserva, ReservaCreate, ReservaUpdate, 
 from app.services.catalogos import escapar_like
 from app.services.correos import enviar_correo_reserva
 from app.services.disponibilidad import plazas_libres
+from app.services.notificaciones import notificar_pago_confirmado
 from app.services.pagos import expirar_sesion
 from app.services.reservas import (
     actualizar_reserva_existente,
@@ -60,8 +61,12 @@ async def crear_reserva(payload: ReservaCreate, usuario: UsuarioActual, sesion: 
         raise PermisoDenegado("Solo el personal puede registrar un cobro en el mostrador.")
 
     reserva, plan = await registrar_reserva(sesion, cliente, payload, personal)
-    # El correo no debe hacer esperar al cliente ni tumbar la reserva si SMTP falla.
-    tareas.add_task(enviar_correo_reserva, cliente.correo, f"{cliente.nombre} {cliente.apellido}", resumen_para_correo(reserva, plan))
+    # El correo no debe hacer esperar al cliente ni tumbar la reserva si el envío falla.
+    if reserva.estado_pago_rel.codigo == "pagado":
+        # Cobrada en el mostrador al registrarla: un solo correo, el de pago, que ya trae todo el detalle y la factura.
+        tareas.add_task(notificar_pago_confirmado, reserva.id)
+    else:
+        tareas.add_task(enviar_correo_reserva, cliente.correo, f"{cliente.nombre} {cliente.apellido}", resumen_para_correo(reserva, plan))
     return {
         "id": reserva.id,
         "mensaje": "Reserva registrada." if payload.pago else "Solicitud registrada. Recibirás la confirmación en tu correo.",
