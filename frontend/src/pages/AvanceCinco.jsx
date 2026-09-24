@@ -220,7 +220,7 @@ export default function AvanceCinco() {
   // La pestaña sale de la dirección (`?vista=`): la barra lateral y las pestañas cambian lo mismo, y no hay que sincronizar nada.
   const vistaPedida = parametros.get("vista");
   const pestana = PESTANAS.includes(vistaPedida) ? vistaPedida : "resumen";
-  const [filtros, setFiltros] = useState({ desde: "", hasta: "", periodo: "mes", estado: "" });
+  const [filtros, setFiltros] = useState({ desde: "", hasta: "", periodo: "mes", estado: "", producto_id: "", servicio_id: "", cliente_id: "" });
   const [formPqr, setFormPqr] = useState({ tipo: "peticion", asunto: "", descripcion: "" });
   const [pregunta, setPregunta] = useState("");
   const [respuesta, setRespuesta] = useState("");
@@ -234,10 +234,16 @@ export default function AvanceCinco() {
   const historial = useCarga(sesion ? `/ventas?${consulta}` : "");
   const listadoDeFacturas = useCarga(sesion ? "/facturas" : "");
   const solicitudes = useCarga(sesion ? "/pqr" : "");
+  // El producto, el servicio y el cliente son catálogos aparte: solo hacen falta para armar los
+  // selectores del filtro, y el de cliente requiere administrador (es quien puede listar usuarios).
+  const productos = useCarga(sesion && esPersonal ? "/productos" : "");
+  const servicios = useCarga(sesion && esPersonal ? "/servicios" : "");
+  const usuarios = useCarga(sesion && rol === "administrador" ? "/usuarios" : "");
   const datos = resumen.datos;
   const ventas = historial.datos ?? [];
   const facturas = listadoDeFacturas.datos ?? [];
   const pqr = solicitudes.datos ?? [];
+  const clientes = (usuarios.datos ?? []).filter((usuario) => usuario.rol === "cliente");
   const avisoDeCarga = resumen.error || historial.error || listadoDeFacturas.error || solicitudes.error;
 
   if (!sesion) return <Navigate to="/login" replace />;
@@ -292,6 +298,31 @@ export default function AvanceCinco() {
       <label className="text-xs font-semibold uppercase text-texto-suave">Hasta<input type="date" value={filtros.hasta} onChange={(evento) => setFiltros({ ...filtros, hasta: evento.target.value })} className={CAMPO} /></label>
       <label className="text-xs font-semibold uppercase text-texto-suave">Agrupar<select value={filtros.periodo} onChange={(evento) => setFiltros({ ...filtros, periodo: evento.target.value })} className={CAMPO}><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option></select></label>
       <label className="text-xs font-semibold uppercase text-texto-suave">Estado<select value={filtros.estado} onChange={(evento) => setFiltros({ ...filtros, estado: evento.target.value })} className={CAMPO}><option value="">Todos</option><option value="completada">Completada</option><option value="pendiente">Pendiente</option><option value="cancelada">Cancelada</option></select></label>
+      {esPersonal && <>
+        <label className="text-xs font-semibold uppercase text-texto-suave">
+          Producto
+          <select value={filtros.producto_id} onChange={(evento) => setFiltros({ ...filtros, producto_id: evento.target.value })} className={CAMPO}>
+            <option value="">Todos</option>
+            {(productos.datos ?? []).map((producto) => <option key={producto.id} value={producto.id}>{producto.nombre}</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-semibold uppercase text-texto-suave">
+          Servicio
+          <select value={filtros.servicio_id} onChange={(evento) => setFiltros({ ...filtros, servicio_id: evento.target.value })} className={CAMPO}>
+            <option value="">Todos</option>
+            {(servicios.datos ?? []).map((servicio) => <option key={servicio.id} value={servicio.id}>{servicio.nombre}</option>)}
+          </select>
+        </label>
+        {rol === "administrador" && (
+          <label className="text-xs font-semibold uppercase text-texto-suave">
+            Cliente
+            <select value={filtros.cliente_id} onChange={(evento) => setFiltros({ ...filtros, cliente_id: evento.target.value })} className={CAMPO}>
+              <option value="">Todos</option>
+              {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nombre} {cliente.apellido}</option>)}
+            </select>
+          </label>
+        )}
+      </>}
     </form>
 
     {pestana === "resumen" && <section className="mt-8 space-y-6">
